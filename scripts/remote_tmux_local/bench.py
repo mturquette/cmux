@@ -167,14 +167,21 @@ def bench_input(h, args, report):
         wait_until(lambda: len(server.control_clients()) >= 1, timeout=10.0, what="the observer to attach")
 
         # Baseline: a plain tmux client in an ordinary cmux terminal.
-        plain_workspace = h.cmux.new_plain_workspace(select_it=False)
-        surfaces = h.cmux.result("surface.list", {"workspace_id": plain_workspace}).get("surfaces") or []
-        plain_surface = str(surfaces[0].get("id"))
-        attach_line = (f"exec env -u TMUX -u TMUX_PANE {h.tmux_bin} -f /dev/null -S {server.socket_path} "
-                       f"attach-session -t =bench\n")
-        h.cmux.result("surface.send_text", {"surface_id": plain_surface, "text": attach_line})
+        # Started through the public `new-workspace --command`, so the client runs as the
+        # workspace's own command instead of depending on a shell prompt being ready.
+        before = h.cmux.workspace_ids()
+        attach_cmd = (f"env -u TMUX -u TMUX_PANE {h.tmux_bin} -f /dev/null -S {server.socket_path} "
+                      f"attach-session -t =bench")
+        rc, out, err = h.app.cli(["new-workspace", "--command", attach_cmd, "--focus", "false"])
+        if rc != 0:
+            raise CheckFailed(f"new-workspace failed ({rc}: {(out + err).strip()[:200]})")
+        new_ids = wait_until(lambda: h.cmux.workspace_ids() - before, timeout=10.0,
+                             what="the plain-client workspace to appear")
+        plain_workspace = sorted(new_ids)[0]
         wait_until(lambda: any(not c["control"] for c in server.clients()), timeout=20.0,
                    what="the plain tmux client to attach")
+        surfaces = h.cmux.result("surface.list", {"workspace_id": plain_workspace}).get("surfaces") or []
+        plain_surface = str(surfaces[0].get("id"))
         time.sleep(0.5)
         plain = measure_typing(h.cmux, plain_surface, observer, args.keystrokes)
         h.cmux.call("workspace.close", {"workspace_id": plain_workspace})

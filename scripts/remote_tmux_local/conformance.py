@@ -589,7 +589,7 @@ def t11_ssh_unchanged(ctx):
     host = "t11-shim-host"
     shim = os.path.join(ctx.h.repo, "scripts", "remote-tmux-e2e-ssh-shim.sh")
     argv_log = os.path.join(ctx.dir, "ssh-argv.log")
-    logging_shim = write_script(os.path.join(ctx.dir, "ssh"),
+    logging_shim = write_script(os.path.join(ctx.dir, "logging-ssh"),
                                 f"#!/bin/sh\nprintf '%s\\n' \"$*\" >> '{argv_log}'\nexec '{shim}' \"$@\"\n")
     tmpdir, sock = private_tmpdir(ctx, "ssh")
     server = ctx.server("s11", socket_path=sock)
