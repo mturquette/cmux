@@ -60,7 +60,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.." || exit 2
 source scripts/remote-tmux-local-adversarial-lib.sh
 
-ALL_IDS="P1 A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A13 A14 A15 A16 A17 A18 A19 A20 A21"
+ALL_IDS="P1 P2 A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A13 A14 A15 A16 A17 A18 A19 A20 A21"
 ONLY=""
 ARTIFACTS=""
 while [ $# -gt 0 ]; do
@@ -103,12 +103,15 @@ require_feature() {
   return 0
 }
 
-# Writes a fake tmux into $FAKES/<name>/tmux from the body on stdin.
+# Writes a fake tmux into $FAKES/<name>/tmux from the body on stdin, and
+# leaves its directory in $FAKE_DIR. Call it directly, never inside $(...):
+# bash 3.2 mis-parses a here-document inside a command substitution when the
+# body holds `case` patterns, because a pattern's `)` closes the substitution.
 make_fake() {
   mkdir -p "$FAKES/$1"
   { echo '#!/bin/sh'; cat; } > "$FAKES/$1/tmux"
   chmod 755 "$FAKES/$1/tmux"
-  printf '%s\n' "$FAKES/$1"
+  FAKE_DIR="$FAKES/$1"
 }
 
 # Common "after an attack" checks: the app is alive, answers its socket, and a
@@ -162,6 +165,125 @@ attack_P1() {
     info "tmux escaped the newline in the subscription value; no line injection possible"
     pass "probe completed (tmux behavior recorded)"
   fi
+}
+
+# ---- P2: a tmux client against a server of another version (Q-C9) ------------
+# No cmux involved. For each pairing of server and client binary, runs the
+# one-shot commands and the control-mode commands that cmux's mirror sends
+# (their shapes are taken from Sources/RemoteTmuxControlConnection*.swift),
+# one at a time, and records for each whether tmux answered with %end, with
+# %error, or not at all. Also finds the server's own binary from its pid.
+# Everything goes to $ARTIFACTS/P2-*.txt; P2-summary.txt is the table.
+P2_CONTROL_COMMANDS=(
+  "display-message -p '#{version}'"
+  "list-sessions -F '#{session_id} #{session_name} #{session_windows} #{session_attached} #{session_created}'"
+  "list-windows -F '#{window_id} #{window_index} #{window_name} #{window_layout} #{window_visible_layout} #{window_flags} #{window_active} #{window_linked}'"
+  "list-panes -s -F '#{pane_id} #{pane_left} #{pane_top} #{pane_width} #{pane_height} #{pane_active} #{pane_current_command}'"
+  "refresh-client -C 160x48"
+  "refresh-client -C '@0:160x48'"
+  "refresh-client -B \"cmux_cwd_0:%0:#{pane_current_path}\""
+  "refresh-client -B 'cmux_sessions::#{S:#{session_id}=#{session_name}:#{W:#{window_id}.}|,}'"
+  "refresh-client -B \"cmux_title_0:%0:#{pane_title}\""
+  "refresh-client -A '%0:pause'"
+  "refresh-client -A '%0:continue'"
+  "capture-pane -p -e -t %0 -S -5"
+  "display-message -p -t %0 -F '#{cursor_x},#{cursor_y},#{scroll_region_upper},#{scroll_region_lower},#{origin_flag},#{mouse_sgr_flag},#{alternate_on}'"
+  "display-message -p -t %0 -F '#{T:pane-border-format}'"
+  "set-option -w -t @0 @cmux_view 1"
+  "new-window -d"
+  "send-keys -t %0 -l x"
+)
+
+# p2_control <client-binary> <socket> <label>: attaches a control client and
+# sends each command alone, waiting up to 3 s for its reply.
+p2_control() {
+  local bin="$1" sock="$2" label="$3"
+  local fifo="$ADV_TMP_ROOT/p2-$label.in" out="$ARTIFACTS/P2-$label-control.txt" err="$ARTIFACTS/P2-$label-control.err"
+  mkfifo "$fifo"
+  ( "$bin" -S "$sock" -C attach -t main < "$fifo" > "$out" 2> "$err"; echo "client exit $?" >> "$err" ) &
+  local cpid=$!
+  exec 6> "$fifo"
+  sleep 1
+  local i=0 cmd before ends
+  : > "$ARTIFACTS/P2-$label-results.txt"
+  for cmd in "${P2_CONTROL_COMMANDS[@]}"; do
+    i=$((i + 1))
+    before="$(grep -acE '^%(end|error) ' "$out" 2>/dev/null)"; before="${before:-0}"
+    if ! kill -0 "$cpid" 2>/dev/null; then
+      printf '%s\t%s\n' "client gone" "$cmd" >> "$ARTIFACTS/P2-$label-results.txt"; continue
+    fi
+    printf '%s\n' "$cmd" >&6
+    local w=0
+    while [ "$w" -lt 30 ]; do
+      ends="$(grep -acE '^%(end|error) ' "$out" 2>/dev/null)"; ends="${ends:-0}"
+      [ "$ends" -gt "$before" ] && break
+      sleep 0.1; w=$((w + 1))
+    done
+    if [ "$ends" -gt "$before" ]; then
+      tail -r "$out" 2>/dev/null | grep -am1 -E '^%(end|error) ' | awk -v c="$cmd" '{ printf "%s\t%s\n", ($1 == "%end" ? "ok" : "ERROR"), c }' >> "$ARTIFACTS/P2-$label-results.txt"
+    else
+      printf '%s\t%s\n' "NO REPLY in 3 s" "$cmd" >> "$ARTIFACTS/P2-$label-results.txt"
+    fi
+  done
+  printf 'detach-client\n' >&6
+  exec 6>&-
+  wait_until 5 bash -c "! kill -0 $cpid 2>/dev/null"; kill "$cpid" 2>/dev/null
+}
+
+# p2_oneshots <client-binary> <socket> <label>
+p2_oneshots() {
+  local bin="$1" sock="$2" label="$3" f="$ARTIFACTS/P2-$label-oneshots.txt"
+  : > "$f"
+  local args
+  for args in "-V" "list-sessions" "display-message -p #{version}" "list-windows -a" "new-window -d" "has-session -t main"; do
+    # shellcheck disable=SC2086
+    run_bounded 10 "$bin" -S "$sock" $args
+    printf 'status %s\t%s\t%s\n' "$RB_STATUS" "$args" "$(printf '%s' "$RB_OUT" | tr '\n' ' ' | head -c 160)" >> "$f"
+  done
+}
+
+attack_P2() {
+  [ -x "$TMUX_OLD_BIN" ] || { skip "TMUX_OLD_BIN ($TMUX_OLD_BIN) is not installed"; return; }
+  local old_sock new_sock summary="$ARTIFACTS/P2-summary.txt"
+  old_sock="$(new_server p2old "$TMUX_OLD_BIN")" || { fail "could not start a 3.2a server"; return; }
+  new_sock="$(new_server p2new "$TMUX_BIN")" || { fail "could not start a 3.6a server"; return; }
+  {
+    echo "server old: $("$TMUX_OLD_BIN" -V)   client new: $("$TMUX_BIN" -V)"
+    echo "PROTOCOL_VERSION in source (tmux.h at 3.2a, tmux-protocol.h at 3.6a): 8 and 8"
+  } > "$summary"
+  p2_oneshots "$TMUX_BIN" "$old_sock" old-server-new-client
+  p2_oneshots "$TMUX_OLD_BIN" "$old_sock" old-server-old-client
+  p2_control "$TMUX_BIN" "$old_sock" old-server-new-client
+  p2_control "$TMUX_OLD_BIN" "$old_sock" old-server-old-client
+  p2_control "$TMUX_BIN" "$new_sock" new-server-new-client
+  # The server's own binary, found from outside the way the app could.
+  local spid comm cmdline txt
+  spid="$("$TMUX_OLD_BIN" -S "$old_sock" display-message -p '#{pid}' 2>/dev/null)"
+  comm="$(ps -o comm= -p "$spid" 2>/dev/null)"
+  cmdline="$(ps -o command= -p "$spid" 2>/dev/null)"
+  txt="$(lsof -a -p "$spid" -d txt -Fn 2>/dev/null | sed -n 's/^n//p' | head -1)"
+  {
+    echo
+    echo "server pid: $spid"
+    echo "ps -o comm=: $comm"
+    echo "ps -o command=: $cmdline"
+    echo "lsof txt (executable): $txt"
+    [ -n "$comm" ] && [ -x "$comm" ] && echo "comm -V: $("$comm" -V 2>&1)"
+    [ -n "$txt" ] && [ -x "$txt" ] && echo "lsof txt -V: $("$txt" -V 2>&1)"
+    local label
+    for label in old-server-new-client old-server-old-client new-server-new-client; do
+      echo
+      echo "== control mode, $label (stderr: $(tr '\n' ' ' < "$ARTIFACTS/P2-$label-control.err"))"
+      cat "$ARTIFACTS/P2-$label-results.txt"
+    done
+    for label in old-server-new-client old-server-old-client; do
+      echo
+      echo "== one-shots, $label"
+      cat "$ARTIFACTS/P2-$label-oneshots.txt"
+    done
+  } >> "$summary"
+  sed 's/^/    | /' "$summary"
+  pass "probe completed (behavior recorded in P2-summary.txt)"
 }
 
 # ---- A1: server killed mid-session; %exit while commands are in flight --------
@@ -321,17 +443,17 @@ attack_A3() {
   require_feature || return
   local sock; sock="$(new_server a3)"
   local garbage hang missing old
-  garbage="$(make_fake garbage <<'EOF'
+  make_fake garbage <<'EOF'
 head -c 4096 /dev/urandom
 printf '\n%%begin 1 2 3\nnot tmux at all\n'
 exit 0
 EOF
-)"
-  hang="$(make_fake hang <<EOF
+  garbage="$FAKE_DIR"
+  make_fake hang <<EOF
 echo \$\$ >> "$FAKES/hang.pids"
 exec sleep 100000
 EOF
-)"
+  hang="$FAKE_DIR"
   missing="$FAKES/missing"; mkdir -p "$missing"
   local msgs="$ARTIFACTS/A3-messages.txt"; : > "$msgs"
 
@@ -443,9 +565,11 @@ attack_A4() {
     skip "TMUX_OLD_BIN ($TMUX_OLD_BIN) is not installed"
   fi
   # A fake that reports 3.1 for -V and for the server's #{version}, and
-  # rejects `refresh-client -B` the way tmux before 3.2 does. Plain if/case
-  # on separate lines: bash 3.2 as /bin/sh rejected the nested one-line case.
-  local fake31; fake31="$(make_fake v31 <<EOF
+  # rejects `refresh-client -B` the way tmux before 3.2 does. (The earlier
+  # failure was bash 3.2 mis-parsing this here-document inside $(...); see
+  # make_fake.)
+  local fake31
+  make_fake v31 <<EOF
 all=" \$* "
 case "\$all" in
   *" -V "*)
@@ -461,7 +585,7 @@ case "\$all" in
 esac
 exec "$REAL_TMUX" "\$@"
 EOF
-)"
+  fake31="$FAKE_DIR"
   local sock31; sock31="$(new_server a4fake)"
   run_bounded 30 env PATH="$fake31:/usr/bin:/bin" "$ADV_REPO_ROOT/scripts/cmux-debug-cli.sh" tmux-mirror --socket-path "$sock31" --no-focus
   printf 'fake31(%s): %s\n' "$RB_STATUS" "$RB_OUT" > "$ARTIFACTS/A4-messages.txt"
@@ -759,7 +883,8 @@ attack_A13() {
   # argv it gets, so a run that never pauses shows what the CLI ran. The wait
   # is capped at 8 s, under the CLI's 10 s deadline for its tmux probe.
   local argv_log="$ADV_TMP_ROOT/a13-argv.log"; : > "$argv_log"
-  local pause; pause="$(make_fake pause <<EOF
+  local pause
+  make_fake pause <<EOF
 printf '%s | PATH=%s\n' "\$*" "\$PATH" >> "$argv_log"
 "$REAL_TMUX" "\$@"; rc=\$?
 case " \$* " in
@@ -771,7 +896,7 @@ case " \$* " in
 esac
 exit \$rc
 EOF
-)"
+  pause="$FAKE_DIR"
   local dir="$ADV_TMP_ROOT/a13"; mkdir -p "$dir"; chmod 700 "$dir"
   local sock="$dir/s" start="$ADV_TMP_ROOT/a13start"; mkdir -p "$start"
   track_server "$sock"
@@ -1090,12 +1215,13 @@ attack_A20() {
 attack_A21() {
   require_feature || return
   local sock; sock="$(new_server a21)"
-  local wrapper; wrapper="$(make_fake stderrheld <<EOF
+  local wrapper
+  make_fake stderrheld <<EOF
 sleep 300 &
 echo \$! >> "$FAKES/stderrheld.pids"
 exec "$REAL_TMUX" "\$@"
 EOF
-)"
+  wrapper="$FAKE_DIR"
   : > "$FAKES/stderrheld.pids"
   run_bounded 60 env PATH="$wrapper:/usr/bin:/bin" "$(cli_path)" tmux-mirror --socket-path "$sock" --no-focus
   printf 'wrapper(%s after %ss): %s\n' "$RB_STATUS" "$RB_ELAPSED" "$RB_OUT" > "$ARTIFACTS/A21.txt"
