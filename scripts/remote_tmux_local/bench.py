@@ -171,7 +171,7 @@ def bench_input(h, args, report):
         # workspace's own command instead of depending on a shell prompt being ready.
         before = h.cmux.workspace_ids()
         attach_cmd = (f"env -u TMUX -u TMUX_PANE {h.tmux_bin} -f /dev/null -S {server.socket_path} "
-                      f"attach-session -t =bench")
+                      f"attach-session -t \'=bench\'")  # quoted: zsh expands a bare =word
         # Focused, because a terminal in a background workspace may not start until shown.
         rc, out, err = h.app.cli(["new-workspace", "--command", attach_cmd, "--focus", "true"])
         if rc != 0:
