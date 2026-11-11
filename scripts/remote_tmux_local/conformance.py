@@ -723,23 +723,28 @@ def count_fds(pid):
 def descriptor_kinds(listing):
     """Counts lsof rows by (TYPE, NAME), with the NAME's per-process noise (pipe and socket
     addresses, which change on every open) folded, so two listings can be compared."""
+    # Columns: COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME, but PIPE and KQUEUE rows
+    # leave DEVICE, SIZE/OFF and NODE empty, so they have fewer fields (round 3 skipped them,
+    # which is why it said "grown: none"). Key on TYPE, the fifth field every row has, and
+    # the last field: the NAME, or a pipe's address. lsof escapes spaces in the command
+    # name (\x20), so the columns do not shift.
     counts = {}
     for line in listing.splitlines()[1:]:
-        parts = line.split(None, 8)
-        if len(parts) < 9:
+        parts = line.split()
+        if len(parts) < 5:
             continue
-        kind, name = parts[4], parts[8]
-        name = re.sub(r"0x[0-9a-f]+", "0x…", name)
+        kind = parts[4]
+        name = re.sub(r"0x[0-9a-f]+", "0x…", parts[-1]) if len(parts) > 5 else ""
         counts[(kind, name)] = counts.get((kind, name), 0) + 1
     return counts
 
 
 def descriptor_difference(before, after):
-    """Rows present more often in `after` than in `before`, as 'TYPE NAME (+n)' strings."""
+    """Rows whose count changed between the listings, as 'TYPE NAME (+n)' or '(-n)', growth first."""
     a, b = descriptor_kinds(before), descriptor_kinds(after)
-    grown = [(k, b[k] - a.get(k, 0)) for k in b if b[k] > a.get(k, 0)]
-    grown.sort(key=lambda item: -item[1])
-    return [f"{kind} {name} (+{n})" for (kind, name), n in grown]
+    changed = [(k, b.get(k, 0) - a.get(k, 0)) for k in set(a) | set(b) if b.get(k, 0) != a.get(k, 0)]
+    changed.sort(key=lambda item: -item[1])
+    return [f"{kind} {name} ({n:+d})" for (kind, name), n in changed]
 
 
 def child_pids(pid):
@@ -781,11 +786,11 @@ def t16_leaks(ctx):
     for name, listing in (("t16-lsof-baseline.txt", base_listing), ("t16-lsof-after.txt", end_listing)):
         with open(os.path.join(ctx.h.artifacts, name), "w") as handle:
             handle.write(listing)
-    grown = descriptor_difference(base_listing, end_listing)
-    if grown:
-        ctx.log("descriptors present after the cycles and not at the baseline: " + "; ".join(grown[:40]))
+    changed = descriptor_difference(base_listing, end_listing)
+    if changed:
+        ctx.log("descriptor kinds whose count changed over the cycles: " + "; ".join(changed[:40]))
     ctx.check(fds <= base_fds, f"after {cycles} cycles, descriptors are back at the baseline ({fds} vs {base_fds}; "
-              f"grown: {'; '.join(grown[:8]) or 'none'}; full listings in t16-lsof-*.txt)")
+              f"changed: {'; '.join(changed[:8]) or 'none'}; full listings in t16-lsof-*.txt)")
     ctx.check(children <= base_children, f"after {cycles} cycles, child processes are back at the baseline ({children} vs {base_children})")
     ctx.check(not server.control_clients(), "no cmux control client is left attached")
 
@@ -820,7 +825,8 @@ def t18_server_dies(ctx):
     workspace_ids = set(result.get("workspace_ids") or [])
     expect_shapes(ctx, mirror, {"t18a": [1], "t18b": [1]})
     pid = ctx.h.app.pid()
-    notes_before = len(ctx.h.cmux.result("notification.list").get("notifications") or [])
+    notes_before_keys = {str(n.get("id") or json.dumps(n, sort_keys=True))
+                         for n in ctx.h.cmux.result("notification.list").get("notifications") or []}
     children_before = child_pids(pid) if pid else set()
     server.kill()
     killed_at = time.monotonic()
@@ -839,8 +845,19 @@ def t18_server_dies(ctx):
         time.sleep(0.1)
     late = [p for p, t in seen.items() if t > 2.0]
     ctx.check(not late, f"no new child process is spawned after the first 2 seconds (spawn times {sorted(seen.values())})")
+    # Q-B3: the message is a cmux notification. Compare by id, not by count, and require that a
+    # new one is about this mirror (names a mirrored session, or tmux), so an unrelated
+    # notification cannot pass the check. Round 2's count-only check passed and round 3's
+    # failed, and the count alone cannot say why.
+    def note_key(note):
+        return str(note.get("id") or json.dumps(note, sort_keys=True))
     notes_after = ctx.h.cmux.result("notification.list").get("notifications") or []
-    ctx.check(len(notes_after) > notes_before, "a message tells the user the mirror ended")
+    new_notes = [n for n in notes_after if note_key(n) not in notes_before_keys]
+    ctx.log(f"notifications posted after kill-server: {json.dumps(new_notes)[:600]}")
+    about_mirror = [n for n in new_notes
+                    if any(s in json.dumps(n).lower() for s in ("t18a", "t18b", "tmux"))]
+    ctx.check(bool(about_mirror), f"a message tells the user the mirror ended "
+              f"({len(new_notes)} new notification(s), {len(about_mirror)} about this mirror)")
     server.new_session("t18c")
     mirror.attach()
     expect_shapes(ctx, mirror, {"t18c": [1]})

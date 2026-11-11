@@ -26,7 +26,7 @@ Where the tests live:
 | R12 | T12 | live | The same session mirrored locally and through `ssh localhost` at once; a split made in each mirror appears in the other. Skipped with a reason when loopback ssh is unavailable or a default server already exists. |
 | R13 | T13 | live | Script run: no focus change. Interactive run (pty): focuses. `--no-focus` interactive: no change. `--focus` from a script: focuses. |
 | R14 | T6 | live | Every failure message, the fallback notice (T20) and every `--help` line is a catalog string translated into every language the catalog ships (reference: the languages of `cli.sshTmux.list.empty`); the help names `cmux local-tmux`. |
-| R15 | T14 | bench | 10 sessions x 5 windows: median of 5 runs from the mirror request until every session shows all windows, at most 1000 ms. |
+| R15 (v1.1) | T14 | bench | Opening a local mirror is no slower than ssh-tmux on the same server. See "How T14 decides 'no slower'" below. |
 | R16 | T15 | bench | 200 keystrokes, echo timestamped by a separate `tmux -C` client: mirror p95 minus plain-client p95 at most 5 ms. |
 | R17 | T16 | live | 50 attach and detach cycles: descriptor and child counts back at the baseline; no control client left. (Track C's leak stage repeats this at scale.) |
 | R18 | T17 | live | `kill -9` of the app: no control client 2 seconds later; every session still running. |
@@ -43,3 +43,14 @@ Each test reports PASS, FAIL, NOT-IMPLEMENTED or SKIP. NOT-IMPLEMENTED means the
 - CLI: `cmux tmux-mirror [--socket-name <n> | --socket-path <p>] [--new-window] [--name <title>] [--focus | --no-focus]` (D9).
 - Socket: `transport: "local"` with `socket_path` on the existing `remote.tmux.*` methods (D8).
 - The fallback notice contains the home directory's path (D7 step 3).
+
+## How T14 decides "no slower" (R15 v1.1, owner decision 2026-11-11)
+
+T14 builds one tmux server with 10 sessions of 5 windows. It times each attach from the mirror request until every session shows all 5 windows, then detaches and waits until no control client is left.
+
+- **Same conditions for both.** One app process, launched with the ssh shim (`scripts/remote-tmux-e2e-ssh-shim.sh`), mirrors the same server both ways: through ssh-tmux, and locally through the server's socket path. ssh-tmux through the shim pays no network or login cost, so the comparison measures the transports, not the network.
+- **Interleaved.** 7 pairs (`--pairs`). Each pair times one attach of each transport, and the pairs alternate which goes first, so warm-up and slow drift in the VM fall on both equally.
+- **The rule.** T14 passes when the median of the 7 local times is at most the median of the 7 ssh-tmux times plus 10% (`--attach-tolerance-pct`). A median of 7 ignores up to 3 outlier runs per side. The 10% margin is about twice the run-to-run spread seen so far (about 5% either side of the median, round 2), so measurement noise alone does not fail the test, while a consistent slowdown of more than 10% does.
+- **Reported every run:** both sets of times, both medians, their ratio, the limit, in how many pairs the local attach was no slower, and the former 1000 ms limit for comparison. The app's debug log for the first attach of each transport is saved as `t14-local-debug.log` and `t14-ssh-debug.log`.
+
+Round 3 (run `20261111-135311-integration-44135652`, the earlier non-interleaved method) measured medians of 3147 ms for local and 3978 ms for ssh-tmux.

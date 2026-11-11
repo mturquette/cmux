@@ -4,7 +4,9 @@ Run through scripts/remote-tmux-local-bench.sh. Both measure from outside the ap
 
 - T14 starts a private server with N sessions of M windows, asks the socket to mirror it, and
   times from the request to the moment every session reports all M windows mirrored. It repeats
-  that `--runs` times and compares the median with `--attach-limit-ms`.
+  that through ssh-tmux (with the ssh shim) on the same server and app, in `--pairs`
+  interleaved pairs, and passes when the local median is at most the ssh-tmux median plus
+  `--attach-tolerance-pct` (R15 v1.1; see T14_RULE below).
 - T15 types `--keystrokes` characters into one pane twice: once through the local mirror, and
   once through a plain `tmux attach` client running in an ordinary cmux terminal. A separate
   control-mode client (`tmux -C`) timestamps the pane's echo. The added latency is the mirror's
@@ -121,83 +123,108 @@ def build_attach_server(h, socket_path, args):
     return server, sessions
 
 
-def time_attaches(h, args, server, sessions, mirror, label):
-    """Times `args.runs` attaches of `mirror` and saves the app's debug log for the first."""
+def time_attach(h, args, server, sessions, mirror, label, keep_log=False):
+    """Times one attach of `mirror`, from the request until every session shows all its
+    windows, then detaches. With keep_log, saves the app's debug log for that attach."""
     debug_log = f"/tmp/cmux-debug-{h.app.slug}.log"
-    timings = []
-    for run in range(args.runs):
-        offset = os.path.getsize(debug_log) if os.path.exists(debug_log) else 0
-        start = time.monotonic()
-        mirror.attach()
+    offset = os.path.getsize(debug_log) if os.path.exists(debug_log) else 0
+    start = time.monotonic()
+    mirror.attach()
 
-        def all_published():
-            for name in sessions:
-                shape = mirror.shape(name)
-                if shape is None or len(shape) != args.windows:
-                    return False
-            return True
-        wait_until(all_published, timeout=60.0, interval=0.005, what=f"{label}: every workspace published")
-        timings.append((time.monotonic() - start) * 1000.0)
-        print(f"    {label} run {run + 1}: {timings[-1]:.0f} ms", flush=True)
-        if run == 0 and os.path.exists(debug_log):
-            # Where the time goes (Q-A8): the app's own records for this attach.
-            with open(debug_log, "rb") as handle:
-                handle.seek(offset)
-                segment = handle.read().decode("utf-8", "replace")
-            with open(os.path.join(h.artifacts, f"t14-{label}-debug.log"), "w") as out:
-                out.write(segment)
-        mirror.detach_all(sessions)
-        wait_until(lambda: not server.control_clients(), timeout=30.0, what=f"{label}: the mirror to detach")
-    return timings
+    def all_published():
+        for name in sessions:
+            shape = mirror.shape(name)
+            if shape is None or len(shape) != args.windows:
+                return False
+        return True
+    wait_until(all_published, timeout=60.0, interval=0.005, what=f"{label}: every workspace published")
+    elapsed = (time.monotonic() - start) * 1000.0
+    if keep_log and os.path.exists(debug_log):
+        # Where the time goes (Q-A8): the app's own records for this attach.
+        with open(debug_log, "rb") as handle:
+            handle.seek(offset)
+            segment = handle.read().decode("utf-8", "replace")
+        with open(os.path.join(h.artifacts, f"t14-{label}-debug.log"), "w") as out:
+            out.write(segment)
+    mirror.detach_all(sessions)
+    wait_until(lambda: not server.control_clients(), timeout=30.0, what=f"{label}: the mirror to detach")
+    return elapsed
 
 
-def bench_attach_ssh(h, args, report):
-    """Q-A8: the same server shape through ssh-tmux and the ssh shim, as the reference cost of
-    the shared mirror core. Recorded alongside T14; it does not decide R15."""
-    shim = os.path.join(h.repo, "scripts", "remote-tmux-e2e-ssh-shim.sh")
-    tmpdir = os.path.join(h.state, "sshref")
-    server, sessions = build_attach_server(h, os.path.join(tmpdir, f"tmux-{os.getuid()}", "default"), args)
-    try:
-        h.app.launch({"CMUX_REMOTE_TMUX_SSH_FOR_TESTING": shim, "TMUX_TMPDIR": tmpdir}, label="t14-ssh-shim")
-        timings = time_attaches(h, args, server, sessions, Mirror(h.cmux, {"host": "bench-shim-host"}), "ssh-shim")
-        report["T14-ssh-reference"] = {
-            "transport": "ssh-tmux through scripts/remote-tmux-e2e-ssh-shim.sh",
-            "runs_ms": [round(t, 1) for t in timings],
-            "median_ms": round(statistics.median(timings), 1),
-        }
-        print(f"    ssh-tmux reference: median {statistics.median(timings):.0f} ms", flush=True)
-    finally:
-        server.kill()
-        h.app.launch(label="base")
+T14_RULE = (
+    "R15 (v1.1): the local attach is no slower than ssh-tmux on the same server. Measured as "
+    "{pairs} interleaved pairs on one server and one app process, alternating which transport goes "
+    "first in each pair so warm-up and drift fall on both equally. PASS when the median local time is "
+    "at most the median ssh-tmux time plus {tol:g}%. The margin is about twice the run-to-run spread "
+    "measured so far (about +/-5% around the median), so it absorbs noise without hiding a "
+    "consistent slowdown; ssh-tmux runs through scripts/remote-tmux-e2e-ssh-shim.sh, so it pays "
+    "no network or login cost."
+)
 
 
 def bench_attach(h, args, report):
+    """T14 (R15 v1.1): local against ssh-tmux, interleaved, on one server and one app.
+
+    The app is launched with the ssh shim and a TMUX_TMPDIR whose default server is the test
+    server, so ssh-tmux reaches it through the shim, and the local mirror reaches the very
+    same server through its explicit socket path (R21: the app's TMUX_TMPDIR does not steer it).
+    """
+    shim = os.path.join(h.repo, "scripts", "remote-tmux-e2e-ssh-shim.sh")
+    tmpdir = os.path.join(h.state, "t14")
+    server, sessions = build_attach_server(h, os.path.join(tmpdir, f"tmux-{os.getuid()}", "default"), args)
+    rule = T14_RULE.format(pairs=args.pairs, tol=args.attach_tolerance_pct)
+    print(f"    rule: {rule}", flush=True)
     try:
-        bench_attach_ssh(h, args, report)
-    except Exception as error:
-        report["T14-ssh-reference"] = {"error": str(error)}
-        print(f"    ssh-tmux reference could not be measured: {error}", flush=True)
-    server, sessions = build_attach_server(h, os.path.join(h.state, "attach.sock"), args)
-    try:
-        mirror = Mirror(h.cmux, local_host(server.socket_path))
-        if not h.features.get("rpc"):
-            report["T14"] = {"status": "NOT-IMPLEMENTED", "detail": h.feature_notes.get("rpc")}
-            return False
-        timings = time_attaches(h, args, server, sessions, mirror, "local")
-        median = statistics.median(timings)
-        ok = median <= args.attach_limit_ms
-        report["T14"] = {
-            "status": "PASS" if ok else "FAIL",
-            "requirement": "R15",
-            "sessions": args.sessions, "windows": args.windows,
-            "runs_ms": [round(t, 1) for t in timings],
-            "median_ms": round(median, 1), "limit_ms": args.attach_limit_ms,
+        h.app.launch({"CMUX_REMOTE_TMUX_SSH_FOR_TESTING": shim, "TMUX_TMPDIR": tmpdir}, label="t14-shim")
+        ssh = Mirror(h.cmux, {"host": "bench-shim-host"})
+        local = Mirror(h.cmux, local_host(server.socket_path))
+        have_local = bool(h.features.get("rpc"))
+        times = {"ssh": [], "local": []}
+        for pair in range(args.pairs):
+            order = ("ssh", "local") if pair % 2 == 0 else ("local", "ssh")
+            for kind in order:
+                if kind == "local" and not have_local:
+                    continue
+                mirror = ssh if kind == "ssh" else local
+                times[kind].append(time_attach(h, args, server, sessions, mirror, kind, keep_log=pair == 0))
+            print(f"    pair {pair + 1}: " + ", ".join(f"{k} {times[k][-1]:.0f} ms" for k in order if times[k]),
+                  flush=True)
+        ssh_median = statistics.median(times["ssh"])
+        entry = {
+            "requirement": "R15 v1.1",
+            "rule": rule,
+            "sessions": args.sessions, "windows": args.windows, "pairs": args.pairs,
+            "ssh_runs_ms": [round(t, 1) for t in times["ssh"]],
+            "ssh_median_ms": round(ssh_median, 1),
+            "tolerance_pct": args.attach_tolerance_pct,
+            "former_absolute_limit_ms": args.attach_limit_ms,
         }
-        print(f"=== T14 (R15): median {median:.0f} ms against a limit of {args.attach_limit_ms} ms: "
-              f"{'PASS' if ok else 'FAIL'}", flush=True)
+        if not have_local:
+            entry.update({"status": "NOT-IMPLEMENTED", "detail": h.feature_notes.get("rpc")})
+            report["T14"] = entry
+            print(f"=== T14 (R15): ssh-tmux median {ssh_median:.0f} ms; local not implemented", flush=True)
+            return False
+        local_median = statistics.median(times["local"])
+        limit = ssh_median * (1 + args.attach_tolerance_pct / 100.0)
+        ok = local_median <= limit
+        faster_pairs = sum(1 for l, s in zip(times["local"], times["ssh"]) if l <= s)
+        entry.update({
+            "status": "PASS" if ok else "FAIL",
+            "local_runs_ms": [round(t, 1) for t in times["local"]],
+            "local_median_ms": round(local_median, 1),
+            "limit_ms": round(limit, 1),
+            "local_to_ssh_ratio": round(local_median / ssh_median, 3),
+            "pairs_where_local_was_no_slower": faster_pairs,
+        })
+        report["T14"] = entry
+        print(f"=== T14 (R15): local median {local_median:.0f} ms, ssh-tmux median {ssh_median:.0f} ms "
+              f"(ratio {local_median / ssh_median:.2f}; limit {limit:.0f} ms = ssh + {args.attach_tolerance_pct:g}%; "
+              f"local no slower in {faster_pairs} of {args.pairs} pairs; the former absolute limit was "
+              f"{args.attach_limit_ms:.0f} ms): {'PASS' if ok else 'FAIL'}", flush=True)
         return ok
     finally:
         server.kill()
+        h.app.launch(label="base")
 
 
 def bench_input(h, args, report):
@@ -286,8 +313,12 @@ def main():
     parser.add_argument("--artifacts")
     parser.add_argument("--sessions", type=int, default=10)
     parser.add_argument("--windows", type=int, default=5)
-    parser.add_argument("--runs", type=int, default=5)
-    parser.add_argument("--attach-limit-ms", type=float, default=1000.0)
+    parser.add_argument("--runs", type=int, default=5, help="unused since R15 v1.1; kept so old callers still parse")
+    parser.add_argument("--pairs", type=int, default=7, help="T14: interleaved local and ssh-tmux attach pairs")
+    parser.add_argument("--attach-tolerance-pct", type=float, default=10.0,
+                        help="T14: the local median may exceed the ssh-tmux median by this much")
+    parser.add_argument("--attach-limit-ms", type=float, default=1000.0,
+                        help="R15 v1.0's absolute limit, reported for information only")
     parser.add_argument("--keystrokes", type=int, default=200)
     parser.add_argument("--added-p95-limit-ms", type=float, default=5.0)
     parser.add_argument("--only", choices=["attach", "input"])
