@@ -304,6 +304,33 @@ to `\r\n` on the way back. cmux already runs `ssh -tt` (also a remote PTY) so
 `RemoteTmuxControlStreamParser` tolerates `\r` today. Keep an explicit test for it rather
 than rediscovering it after a transport swap.
 
+## The local transport
+
+`cmux tmux-mirror` mirrors a tmux server on the same Mac through a third profile,
+`RemoteTmuxLocalTransportProfile` (`transport: "local"`). It uses the seam without changing
+the parser, the mirrors or the reconnect rules:
+
+- **Identity is the socket.** A local host carries one field, an absolute, canonical
+  `serverSocketPath`, and its `connectionHash` is derived from a `local` tag plus that path.
+  The CLI resolves the path from the calling shell (`$TMUX` inside tmux, otherwise
+  `TMUX_TMPDIR`, `--socket-name` or `--socket-path`), because the app never sees that
+  shell's environment. The socket boundary refuses a path that is relative, has hidden or
+  control characters, is not a socket, or belongs to another user, and refuses `host`,
+  `port`, `identity_file`, `transport_port`, `transport_broker` and `transport_helper_path`.
+- **Every tmux command names the server.** `tmuxServerArguments(host:)` puts `-S <socket>`
+  in front of the control stream and every one-shot, and the children run without `TMUX`,
+  `TMUX_PANE` and `TMUX_TMPDIR`, so the app's own environment cannot redirect either one.
+- **No ssh.** One-shots run `/bin/sh -c <resolver>` with the same resolver and quoting ssh
+  sends a remote shell, so Homebrew and MacPorts tmux are found from a GUI app's PATH.
+  `usesSharedControlMaster` is false, which turns the ControlMaster steps into no-ops.
+- **An owned pty.** tmux control mode needs a terminal, so the client runs on a pty cmux
+  allocates itself (`RemoteTmuxLocalPseudoTerminal`, chosen by `ownsPseudoTerminal`). When
+  cmux dies the master closes and tmux drops the client at once; under `script(1)` it stayed
+  attached until the pane next printed. All three descriptors are close-on-exec, and stderr
+  stays a pipe so failure classification is unchanged.
+- **Teardown is a detach.** `remoteHalfSurvivesLocalExit` is false: killing the client closes
+  its pty, so closing a mirror workspace leaves the session running, as for ssh.
+
 ## Order of work
 
 1. Fix the reconnect classifier so an auth-required reconnect surfaces the interactive path

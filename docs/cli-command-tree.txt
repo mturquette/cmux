@@ -1453,6 +1453,14 @@ command  tmux attach  aliases=open
   arg  --window  kind=option  completion=custom
   arg  --workspace  kind=option  completion=custom
   arg  arguments  kind=argument  completion=-
+command  tmux-mirror  aliases=-
+  arg  --focus  kind=flag  completion=-
+  arg  --name  kind=option  completion=-
+  arg  --new-window  kind=flag  completion=-
+  arg  --no-focus  kind=flag  completion=-
+  arg  --socket-name  kind=option  completion=-
+  arg  --socket-path  kind=option  completion=file()
+  arg  arguments  kind=argument  completion=-
 command  todo  aliases=-
   arg  --window  kind=option  completion=custom
   arg  --workspace  kind=option  completion=custom
