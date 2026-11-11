@@ -91,4 +91,11 @@ struct RemoteTmuxLocalTransportProfile: RemoteTmuxTransportProfile {
 
     /// There is no login to offer: the socket either is the user's or is refused.
     var authenticationIsSSHShaped: Bool { false }
+
+    /// Worded for this Mac rather than a remote host.
+    func tmuxNotFoundError(host: RemoteTmuxHost) -> RemoteTmuxError { .localTmuxNotFound }
+
+    func unsupportedTmuxError(detected: String) -> RemoteTmuxError {
+        .localTmuxUnsupported(detected: detected)
+    }
 }

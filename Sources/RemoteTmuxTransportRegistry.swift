@@ -207,6 +207,12 @@ protocol RemoteTmuxTransportProfile: Sendable {
     /// none. Defaults to none.
     func appCreatedSessionArguments() -> [String]
 
+    /// The error for "no tmux binary was found", worded for where this transport looks.
+    func tmuxNotFoundError(host: RemoteTmuxHost) -> RemoteTmuxError
+
+    /// The error for a tmux below ``RemoteTmuxVersion/minimumSupported``.
+    func unsupportedTmuxError(detected: String) -> RemoteTmuxError
+
     /// Whether the transport needs a pseudo-terminal rather than pipes.
     ///
     /// This used to say that `et` writes nothing at all on pipes, so a pty was the difference
@@ -314,6 +320,15 @@ extension RemoteTmuxTransportProfile {
 
     /// A remote server starts the session where tmux's own defaults put it.
     func appCreatedSessionArguments() -> [String] { [] }
+
+    /// The remote wording, which names the host and the install commands for it.
+    func tmuxNotFoundError(host: RemoteTmuxHost) -> RemoteTmuxError {
+        .tmuxNotFound(destination: host.destination)
+    }
+
+    func unsupportedTmuxError(detected: String) -> RemoteTmuxError {
+        .unsupportedTmux(detected: detected)
+    }
 }
 
 /// What end-of-stream on the control connection means.

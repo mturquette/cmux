@@ -28,6 +28,16 @@ enum RemoteTmuxError: Error, Sendable, Equatable {
     /// ``unreachable`` on purpose: the host answered, and telling the user to check the network
     /// sends them to the wrong place. Carries the destination for the message.
     case authenticationRequired(String)
+
+    /// The local transport found no tmux binary on this Mac.
+    case localTmuxNotFound
+
+    /// The local tmux is older than ``RemoteTmuxVersion/minimumSupported``.
+    case localTmuxUnsupported(detected: String)
+
+    /// The local tmux control client could not be started, for example because its pty could not
+    /// be set up.
+    case localLaunchFailed(String)
 }
 
 extension RemoteTmuxError {
@@ -104,6 +114,28 @@ extension RemoteTmuxError {
                 Self.sanitizedDetail(destination),
                 RemoteTmuxVersion.minimumSupported.displayString
             )
+        case .localTmuxNotFound:
+            let format = String(
+                localized: "remoteTmux.error.localTmuxNotFound",
+                defaultValue: "tmux was not found on this Mac. cmux tmux-mirror needs tmux %@ or newer; install it with brew install tmux."
+            )
+            return String(format: format, RemoteTmuxVersion.minimumSupported.displayString)
+        case let .localTmuxUnsupported(detected):
+            let format = String(
+                localized: "remoteTmux.error.localUnsupportedVersion",
+                defaultValue: "the local tmux is too old (found %@; cmux needs version %@ or newer)"
+            )
+            return String(
+                format: format,
+                Self.sanitizedDetail(detected),
+                RemoteTmuxVersion.minimumSupported.displayString
+            )
+        case let .localLaunchFailed(detail):
+            let format = String(
+                localized: "remoteTmux.error.localLaunchFailed",
+                defaultValue: "failed to start local tmux: %@"
+            )
+            return String(format: format, Self.sanitizedDetail(detail))
         }
     }
 

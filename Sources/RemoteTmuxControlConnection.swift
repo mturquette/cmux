@@ -767,7 +767,7 @@ final class RemoteTmuxControlConnection {
                 ownedPseudoTerminal = try RemoteTmuxLocalPseudoTerminal()
             } catch {
                 stderrBuffer.append("\(error)\n")
-                throw RemoteTmuxError.launchFailed("\(error)")
+                throw RemoteTmuxError.localLaunchFailed("\(error)")
             }
             proc.executableURL = URL(fileURLWithPath: transportExecutable)
             proc.arguments = transportArgv

@@ -84772,55 +84772,55 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Usage: cmux local-tmux <start|attach|list|status|detach|close|cleanup> [session] [options]\n\nOpt-in local tmux sessions survive cmux quit, crash, and app updates. Ordinary cmux terminals are unchanged.\n\nstart <name> [--cwd <path>] [--command <shell>] [--detached]\nattach <name|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <name|--id <uuid>> [--json]\ndetach <name|--id <uuid>> [--client <id> | --all]\nclose <name|--id <uuid>>\ncleanup [--prune]\n\nThe registry and tmux server socket live under ~/.cmux/local-tmux with user-only permissions. `attach --headless` hands the terminal directly to tmux for a client outside the cmux GUI."
+            "value": "Usage: cmux local-tmux <start|attach|list|status|detach|close|cleanup> [session] [options]\n\nTo show an existing tmux server's sessions as workspaces, use cmux tmux-mirror.\nOpt-in local tmux sessions survive cmux quit, crash, and app updates. Ordinary cmux terminals are unchanged.\n\nstart <name> [--cwd <path>] [--command <shell>] [--detached]\nattach <name|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <name|--id <uuid>> [--json]\ndetach <name|--id <uuid>> [--client <id> | --all]\nclose <name|--id <uuid>>\ncleanup [--prune]\n\nThe registry and tmux server socket live under ~/.cmux/local-tmux with user-only permissions. `attach --headless` hands the terminal directly to tmux for a client outside the cmux GUI."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "使い方: cmux local-tmux <start|attach|list|status|detach|close|cleanup> [セッション] [オプション]\n\nオプトインしたローカル tmux セッションは cmux の終了、クラッシュ、アップデート後も維持されます。通常の cmux ターミナルの動作は変わりません。\n\nstart <name> [--cwd <path>] [--command <shell>] [--detached]\nattach <name|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <name|--id <uuid>> [--json]\ndetach <name|--id <uuid>> [--client <id> | --all]\nclose <name|--id <uuid>>\ncleanup [--prune]\n\nレジストリと tmux サーバーソケットは ~/.cmux/local-tmux にユーザー専用権限で保存されます。`attach --headless` は cmux GUI 外のクライアントを tmux に直接接続します。"
+            "value": "使い方: cmux local-tmux <start|attach|list|status|detach|close|cleanup> [セッション] [オプション]\n\n既存の tmux サーバーのセッションをワークスペースとして表示するには cmux tmux-mirror を使ってください。\nオプトインしたローカル tmux セッションは cmux の終了、クラッシュ、アップデート後も維持されます。通常の cmux ターミナルの動作は変わりません。\n\nstart <name> [--cwd <path>] [--command <shell>] [--detached]\nattach <name|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <name|--id <uuid>> [--json]\ndetach <name|--id <uuid>> [--client <id> | --all]\nclose <name|--id <uuid>>\ncleanup [--prune]\n\nレジストリと tmux サーバーソケットは ~/.cmux/local-tmux にユーザー専用権限で保存されます。`attach --headless` は cmux GUI 外のクライアントを tmux に直接接続します。"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Verwendung: cmux local-tmux <start|attach|list|status|detach|close|cleanup> [Sitzung] [Optionen]\n\nOpt-in lokale tmux-Sitzungen überstehen das Beenden von cmux, Abstürze und App-Updates. Normale cmux-Terminals bleiben unverändert.\n\nstart <Name> [--cwd <Pfad>] [--command <Shell>] [--detached]\nattach <Name|--id <UUID>> [--workspace <ID|Ref|Index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <Name|--id <UUID>> [--json]\ndetach <Name|--id <UUID>> [--client <ID> | --all]\nclose <Name|--id <UUID>>\ncleanup [--prune]\n\nDie Registrierung und der tmux-Server-Socket befinden sich unter ~/.cmux/local-tmux mit Berechtigungen nur für den Benutzer. `attach --headless` übergibt das Terminal direkt an tmux für einen Client außerhalb der cmux-GUI."
+            "value": "Verwendung: cmux local-tmux <start|attach|list|status|detach|close|cleanup> [Sitzung] [Optionen]\n\nUm die Sitzungen eines vorhandenen tmux-Servers als Workspaces anzuzeigen, verwende cmux tmux-mirror.\nOpt-in lokale tmux-Sitzungen überstehen das Beenden von cmux, Abstürze und App-Updates. Normale cmux-Terminals bleiben unverändert.\n\nstart <Name> [--cwd <Pfad>] [--command <Shell>] [--detached]\nattach <Name|--id <UUID>> [--workspace <ID|Ref|Index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <Name|--id <UUID>> [--json]\ndetach <Name|--id <UUID>> [--client <ID> | --all]\nclose <Name|--id <UUID>>\ncleanup [--prune]\n\nDie Registrierung und der tmux-Server-Socket befinden sich unter ~/.cmux/local-tmux mit Berechtigungen nur für den Benutzer. `attach --headless` übergibt das Terminal direkt an tmux für einen Client außerhalb der cmux-GUI."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Utilisation : cmux local-tmux <start|attach|list|status|detach|close|cleanup> [session] [options]\n\nLes sessions tmux locales optionnelles survivent à l'arrêt, au plantage et aux mises à jour de cmux. Les terminaux ordinaires de cmux restent inchangés.\n\nstart <nom> [--cwd <chemin>] [--command <shell>] [--detached]\nattach <nom|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <nom|--id <uuid>> [--json]\ndetach <nom|--id <uuid>> [--client <id> | --all]\nclose <nom|--id <uuid>>\ncleanup [--prune]\n\nLe registre et le socket du serveur tmux résident sous ~/.cmux/local-tmux avec des permissions réservées à l'utilisateur. `attach --headless` transmet le terminal directement à tmux pour un client extérieur à l'interface graphique de cmux."
+            "value": "Utilisation : cmux local-tmux <start|attach|list|status|detach|close|cleanup> [session] [options]\n\nPour afficher les sessions d’un serveur tmux existant comme espaces de travail, utilisez cmux tmux-mirror.\nLes sessions tmux locales optionnelles survivent à l'arrêt, au plantage et aux mises à jour de cmux. Les terminaux ordinaires de cmux restent inchangés.\n\nstart <nom> [--cwd <chemin>] [--command <shell>] [--detached]\nattach <nom|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <nom|--id <uuid>> [--json]\ndetach <nom|--id <uuid>> [--client <id> | --all]\nclose <nom|--id <uuid>>\ncleanup [--prune]\n\nLe registre et le socket du serveur tmux résident sous ~/.cmux/local-tmux avec des permissions réservées à l'utilisateur. `attach --headless` transmet le terminal directement à tmux pour un client extérieur à l'interface graphique de cmux."
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "الاستخدام: cmux local-tmux <start|attach|list|status|detach|close|cleanup> [session] [options]\n\nجلسات tmux المحلية الاختيارية تظل نشطة بعد إنهاء cmux، والانهيار، وتحديثات التطبيق. لا تتغير طرفيات cmux العادية.\n\nstart <name> [--cwd <path>] [--command <shell>] [--detached]\nattach <name|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <name|--id <uuid>> [--json]\ndetach <name|--id <uuid>> [--client <id> | --all]\nclose <name|--id <uuid>>\ncleanup [--prune]\n\nيعيش السجل ومقبس خادم tmux تحت ~/.cmux/local-tmux بصلاحيات للمستخدم فقط. يسلّم `attach --headless` الطرفية مباشرة إلى tmux لعميل خارج واجهة cmux الرسومية."
+            "value": "الاستخدام: cmux local-tmux <start|attach|list|status|detach|close|cleanup> [session] [options]\n\nلعرض جلسات خادم tmux موجود كمساحات عمل، استخدم cmux tmux-mirror.\nجلسات tmux المحلية الاختيارية تظل نشطة بعد إنهاء cmux، والانهيار، وتحديثات التطبيق. لا تتغير طرفيات cmux العادية.\n\nstart <name> [--cwd <path>] [--command <shell>] [--detached]\nattach <name|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <name|--id <uuid>> [--json]\ndetach <name|--id <uuid>> [--client <id> | --all]\nclose <name|--id <uuid>>\ncleanup [--prune]\n\nيعيش السجل ومقبس خادم tmux تحت ~/.cmux/local-tmux بصلاحيات للمستخدم فقط. يسلّم `attach --headless` الطرفية مباشرة إلى tmux لعميل خارج واجهة cmux الرسومية."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Uso: cmux local-tmux <start|attach|list|status|detach|close|cleanup> [session] [options]\n\nLas sesiones locales de tmux opcionales sobreviven a cierres, fallos y actualizaciones de la aplicación cmux. Las terminales ordinarias de cmux no cambian.\n\nstart <name> [--cwd <path>] [--command <shell>] [--detached]\nattach <name|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <name|--id <uuid>> [--json]\ndetach <name|--id <uuid>> [--client <id> | --all]\nclose <name|--id <uuid>>\ncleanup [--prune]\n\nEl registro y el socket del servidor de tmux residen en ~/.cmux/local-tmux con permisos exclusivos del usuario. `attach --headless` entrega la terminal directamente a tmux para un cliente fuera de la interfaz gráfica de cmux."
+            "value": "Uso: cmux local-tmux <start|attach|list|status|detach|close|cleanup> [session] [options]\n\nPara mostrar las sesiones de un servidor tmux existente como espacios de trabajo, usa cmux tmux-mirror.\nLas sesiones locales de tmux opcionales sobreviven a cierres, fallos y actualizaciones de la aplicación cmux. Las terminales ordinarias de cmux no cambian.\n\nstart <name> [--cwd <path>] [--command <shell>] [--detached]\nattach <name|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <name|--id <uuid>> [--json]\ndetach <name|--id <uuid>> [--client <id> | --all]\nclose <name|--id <uuid>>\ncleanup [--prune]\n\nEl registro y el socket del servidor de tmux residen en ~/.cmux/local-tmux con permisos exclusivos del usuario. `attach --headless` entrega la terminal directamente a tmux para un cliente fuera de la interfaz gráfica de cmux."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "用法：cmux local-tmux <start|attach|list|status|detach|close|cleanup> [session] [options]\n\n選擇加入的本機 tmux 工作階段在 cmux 結束、當機和軟體更新後仍能保留。一般的 cmux 終端機則不受影響。\n\nstart <name> [--cwd <path>] [--command <shell>] [--detached]\nattach <name|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <name|--id <uuid>> [--json]\ndetach <name|--id <uuid>> [--client <id> | --all]\nclose <name|--id <uuid>>\ncleanup [--prune]\n\n註冊表與 tmux 伺服器 socket 位於 ~/.cmux/local-tmux 下，並具有僅限使用者存取的權限。`attach --headless` 會將終端機直接交給 tmux，以在 cmux GUI 之外使用用戶端。`"
+            "value": "用法：cmux local-tmux <start|attach|list|status|detach|close|cleanup> [session] [options]\n\n若要將既有 tmux 伺服器的工作階段顯示為工作區，請使用 cmux tmux-mirror。\n選擇加入的本機 tmux 工作階段在 cmux 結束、當機和軟體更新後仍能保留。一般的 cmux 終端機則不受影響。\n\nstart <name> [--cwd <path>] [--command <shell>] [--detached]\nattach <name|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <name|--id <uuid>> [--json]\ndetach <name|--id <uuid>> [--client <id> | --all]\nclose <name|--id <uuid>>\ncleanup [--prune]\n\n註冊表與 tmux 伺服器 socket 位於 ~/.cmux/local-tmux 下，並具有僅限使用者存取的權限。`attach --headless` 會將終端機直接交給 tmux，以在 cmux GUI 之外使用用戶端。`"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "用法: cmux local-tmux <start|attach|list|status|detach|close|cleanup> [session] [options]\n\n选择加入的本地 tmux 会话在 cmux 退出、崩溃和应用更新时仍能存活。普通的 cmux 终端不受影响。\n\nstart <name> [--cwd <path>] [--command <shell>] [--detached]\nattach <name|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <name|--id <uuid>> [--json]\ndetach <name|--id <uuid>> [--client <id> | --all]\nclose <name|--id <uuid>>\ncleanup [--prune]\n\n注册表和 tmux 服务器套接字位于具有仅用户权限的 ~/.cmux/local-tmux 下。`attach --headless` 会将终端直接移交给 tmux，以便在 cmux GUI 之外运行客户端。"
+            "value": "用法: cmux local-tmux <start|attach|list|status|detach|close|cleanup> [session] [options]\n\n若要将已有 tmux 服务器的会话显示为工作区，请使用 cmux tmux-mirror。\n选择加入的本地 tmux 会话在 cmux 退出、崩溃和应用更新时仍能存活。普通的 cmux 终端不受影响。\n\nstart <name> [--cwd <path>] [--command <shell>] [--detached]\nattach <name|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <name|--id <uuid>> [--json]\ndetach <name|--id <uuid>> [--client <id> | --all]\nclose <name|--id <uuid>>\ncleanup [--prune]\n\n注册表和 tmux 服务器套接字位于具有仅用户权限的 ~/.cmux/local-tmux 下。`attach --headless` 会将终端直接移交给 tmux，以便在 cmux GUI 之外运行客户端。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "사용법: cmux local-tmux <start|attach|list|status|detach|close|cleanup> [session] [options]\n\n선택하여 사용하는 로컬 tmux 세션은 cmux 종료, 충돌 및 앱 업데이트 후에도 유지됩니다. 일반 cmux 터미널은 변경되지 않습니다.\n\nstart <name> [--cwd <path>] [--command <shell>] [--detached]\nattach <name|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <name|--id <uuid>> [--json]\ndetach <name|--id <uuid>> [--client <id> | --all]\nclose <name|--id <uuid>>\ncleanup [--prune]\n\n레지스트리 및 tmux 서버 소켓은 사용자 전용 권한으로 ~/.cmux/local-tmux 아래에 저장됩니다. `attach --headless`는 cmux GUI 외부의 클라이언트를 위해 터미널을 tmux에 직접 전달합니다."
+            "value": "사용법: cmux local-tmux <start|attach|list|status|detach|close|cleanup> [session] [options]\n\n기존 tmux 서버의 세션을 워크스페이스로 표시하려면 cmux tmux-mirror를 사용하세요.\n선택하여 사용하는 로컬 tmux 세션은 cmux 종료, 충돌 및 앱 업데이트 후에도 유지됩니다. 일반 cmux 터미널은 변경되지 않습니다.\n\nstart <name> [--cwd <path>] [--command <shell>] [--detached]\nattach <name|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <name|--id <uuid>> [--json]\ndetach <name|--id <uuid>> [--client <id> | --all]\nclose <name|--id <uuid>>\ncleanup [--prune]\n\n레지스트리 및 tmux 서버 소켓은 사용자 전용 권한으로 ~/.cmux/local-tmux 아래에 저장됩니다. `attach --headless`는 cmux GUI 외부의 클라이언트를 위해 터미널을 tmux에 직접 전달합니다."
           }
         }
       }
@@ -645256,6 +645256,48 @@
         "ko": { "stringUnit": { "state": "translated", "value": "%@의 서버에 tmux 세션이 없습니다." } },
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "%@ 处的服务器上没有 tmux 会话。" } },
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "%@ 的伺服器上沒有 tmux 工作階段。" } }
+      }
+    },
+    "remoteTmux.error.localTmuxNotFound": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "tmux was not found on this Mac. cmux tmux-mirror needs tmux %@ or newer; install it with brew install tmux." } },
+        "ar": { "stringUnit": { "state": "translated", "value": "لم يُعثر على tmux على جهاز Mac هذا. يتطلب cmux tmux-mirror الإصدار %@ من tmux أو أحدث؛ ثبّته باستخدام brew install tmux." } },
+        "de": { "stringUnit": { "state": "translated", "value": "tmux wurde auf diesem Mac nicht gefunden. cmux tmux-mirror benötigt tmux %@ oder neuer; installiere es mit brew install tmux." } },
+        "es": { "stringUnit": { "state": "translated", "value": "No se encontró tmux en este Mac. cmux tmux-mirror necesita tmux %@ o posterior; instálalo con brew install tmux." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "tmux est introuvable sur ce Mac. cmux tmux-mirror nécessite tmux %@ ou plus récent ; installez-le avec brew install tmux." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "この Mac に tmux が見つかりません。cmux tmux-mirror には tmux %@ 以降が必要です。brew install tmux でインストールしてください。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "이 Mac에서 tmux를 찾을 수 없습니다. cmux tmux-mirror에는 tmux %@ 이상이 필요합니다. brew install tmux로 설치하세요." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "在此 Mac 上找不到 tmux。cmux tmux-mirror 需要 tmux %@ 或更高版本；请使用 brew install tmux 安装。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "在此 Mac 上找不到 tmux。cmux tmux-mirror 需要 tmux %@ 或更新版本；請使用 brew install tmux 安裝。" } }
+      }
+    },
+    "remoteTmux.error.localUnsupportedVersion": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "the local tmux is too old (found %@; cmux needs version %@ or newer)" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "إصدار tmux المحلي قديم جدًا (عُثر على %@؛ يحتاج cmux إلى الإصدار %@ أو أحدث)" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Das lokale tmux ist zu alt (gefunden: %@; cmux benötigt Version %@ oder neuer)" } },
+        "es": { "stringUnit": { "state": "translated", "value": "el tmux local es demasiado antiguo (se encontró %@; cmux necesita la versión %@ o posterior)" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "le tmux local est trop ancien (version %@ trouvée ; cmux nécessite la version %@ ou plus récente)" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ローカルの tmux が古すぎます（検出: %@、cmux にはバージョン %@ 以降が必要です）" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "로컬 tmux가 너무 오래되었습니다(발견: %@, cmux에는 버전 %@ 이상이 필요합니다)" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "本地 tmux 版本过旧（检测到 %@；cmux 需要 %@ 或更高版本）" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "本機 tmux 版本過舊（偵測到 %@；cmux 需要 %@ 或更新版本）" } }
+      }
+    },
+    "remoteTmux.error.localLaunchFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "failed to start local tmux: %@" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "تعذّر تشغيل tmux المحلي: %@" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Lokales tmux konnte nicht gestartet werden: %@" } },
+        "es": { "stringUnit": { "state": "translated", "value": "no se pudo iniciar el tmux local: %@" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "impossible de démarrer le tmux local : %@" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ローカルの tmux を起動できませんでした: %@" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "로컬 tmux를 시작하지 못했습니다: %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法启动本地 tmux：%@" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "無法啟動本機 tmux：%@" } }
       }
     },
     "remoteTmux.local.parameterNotAllowed": {

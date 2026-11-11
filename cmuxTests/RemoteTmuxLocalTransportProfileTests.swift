@@ -113,6 +113,43 @@ import Testing
         #expect(RemoteTmuxSSHTransportProfile().appCreatedSessionArguments().isEmpty)
     }
 
+    // MARK: Failure wording (R6)
+
+    @Test func missingTmuxIsReportedForThisMacWithoutSSH() async throws {
+        let fake = try FakeShell(body: "printf '%s\\n' '\(RemoteTmuxHost.tmuxNotFoundSentinel)' >&2; exit 127")
+        defer { fake.cleanUp() }
+        let transport = RemoteTmuxSSHTransport(
+            host: RemoteTmuxHost.local(serverSocketPath: "/tmp/tmux-501/default"),
+            sshExecutablePath: fake.path
+        )
+
+        await #expect(throws: RemoteTmuxError.localTmuxNotFound) { _ = try await transport.listSessions() }
+        #expect(!RemoteTmuxError.localTmuxNotFound.message.lowercased().contains("ssh"))
+    }
+
+    @Test func oldTmuxIsRefusedWithLocalWording() async throws {
+        // No server answers; the client binary reports 3.1, below the 3.2 minimum.
+        let fake = try FakeShell(body: """
+        case "$2" in
+          *"'-V'"*) printf 'tmux 3.1\\n'; exit 0 ;;
+          *) printf 'no server running on /tmp/tmux-501/default\\n' >&2; exit 1 ;;
+        esac
+        """)
+        defer { fake.cleanUp() }
+        let transport = RemoteTmuxSSHTransport(
+            host: RemoteTmuxHost.local(serverSocketPath: "/tmp/tmux-501/default"),
+            sshExecutablePath: fake.path
+        )
+
+        await #expect(throws: RemoteTmuxError.localTmuxUnsupported(detected: "3.1")) {
+            try await transport.assertMinimumTmuxVersion(checkClientWhenNoServer: true)
+        }
+        let message = RemoteTmuxError.localTmuxUnsupported(detected: "3.1").message
+        #expect(message.contains("3.1"))
+        #expect(!message.lowercased().contains("ssh"))
+        #expect(!RemoteTmuxError.localLaunchFailed("openpty").message.lowercased().contains("ssh"))
+    }
+
     // MARK: Identity
 
     @Test func localIdentityIsTheSocketPathAlone() {
@@ -262,6 +299,24 @@ import Testing
             Darwin.close(descriptor)
             try? FileManager.default.removeItem(atPath: directory)
         }
+    }
+
+    /// A fake `/bin/sh` stand-in with a fixed body; `$2` is the resolver command it was handed.
+    private struct FakeShell {
+        let root: URL
+        let path: String
+
+        init(body: String) throws {
+            root = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+                .appendingPathComponent("remote-tmux-local-fake-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            let url = root.appendingPathComponent("sh")
+            try "#!/bin/sh\n\(body)\n".write(to: url, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+            path = url.path
+        }
+
+        func cleanUp() { try? FileManager.default.removeItem(at: root) }
     }
 
     /// A fake binary that appends each invocation's argv to a log and exits 0 with no output.

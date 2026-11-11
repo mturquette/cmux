@@ -12,7 +12,7 @@ extension RemoteTmuxSSHTransport {
     /// Builds the domain error for a failed remote tmux command.
     nonisolated func commandFailure(_ result: RemoteTmuxCommandResult) -> RemoteTmuxError {
         if Self.indicatesTmuxMissing(exitCode: result.exitCode, stderr: result.stderr) {
-            return .tmuxNotFound(destination: host.destination)
+            return transportProfile.tmuxNotFoundError(host: host)
         }
         return .commandFailed(exitCode: result.exitCode, stderr: result.stderr)
     }

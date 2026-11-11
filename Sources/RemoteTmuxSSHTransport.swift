@@ -131,20 +131,20 @@ actor RemoteTmuxSSHTransport {
                 if try await serverSupportsRefreshClientSubscriptions() {
                     return
                 }
-                throw RemoteTmuxError.unsupportedTmux(detected: RemoteTmuxError.unknownVersionDisplayName)
+                throw transportProfile.unsupportedTmuxError(detected: RemoteTmuxError.unknownVersionDisplayName)
             }
-            try Self.assertSupportedTmuxVersion(version)
+            try assertSupportedTmuxVersion(version)
             return
         }
         guard checkClientWhenNoServer else { return }
         if let version = try await tmuxClientVersion() {
-            try Self.assertSupportedTmuxVersion(version)
+            try assertSupportedTmuxVersion(version)
         }
     }
 
-    private static func assertSupportedTmuxVersion(_ version: RemoteTmuxVersion) throws {
+    private func assertSupportedTmuxVersion(_ version: RemoteTmuxVersion) throws {
         if !version.meetsMinimum {
-            throw RemoteTmuxError.unsupportedTmux(detected: version.displayString)
+            throw transportProfile.unsupportedTmuxError(detected: version.displayString)
         }
     }
 
