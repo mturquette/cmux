@@ -172,16 +172,22 @@ def bench_input(h, args, report):
         before = h.cmux.workspace_ids()
         attach_cmd = (f"env -u TMUX -u TMUX_PANE {h.tmux_bin} -f /dev/null -S {server.socket_path} "
                       f"attach-session -t =bench")
-        rc, out, err = h.app.cli(["new-workspace", "--command", attach_cmd, "--focus", "false"])
+        # Focused, because a terminal in a background workspace may not start until shown.
+        rc, out, err = h.app.cli(["new-workspace", "--command", attach_cmd, "--focus", "true"])
         if rc != 0:
             raise CheckFailed(f"new-workspace failed ({rc}: {(out + err).strip()[:200]})")
         new_ids = wait_until(lambda: h.cmux.workspace_ids() - before, timeout=10.0,
                              what="the plain-client workspace to appear")
         plain_workspace = sorted(new_ids)[0]
-        wait_until(lambda: any(not c["control"] for c in server.clients()), timeout=20.0,
-                   what="the plain tmux client to attach")
         surfaces = h.cmux.result("surface.list", {"workspace_id": plain_workspace}).get("surfaces") or []
         plain_surface = str(surfaces[0].get("id"))
+        try:
+            wait_until(lambda: any(not c["control"] for c in server.clients()), timeout=20.0,
+                       what="the plain tmux client to attach")
+        except CheckFailed as error:
+            screen = h.cmux.call("surface.read_text", {"surface_id": plain_surface})
+            text = json.dumps((screen.get("result") or screen.get("error") or {}))[:600]
+            raise CheckFailed(f"{error}; the plain terminal shows: {text}")
         time.sleep(0.5)
         plain = measure_typing(h.cmux, plain_surface, observer, args.keystrokes)
         h.cmux.call("workspace.close", {"workspace_id": plain_workspace})
