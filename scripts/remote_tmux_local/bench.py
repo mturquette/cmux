@@ -152,13 +152,15 @@ def time_attach(h, args, server, sessions, mirror, label, keep_log=False):
 
 
 T14_RULE = (
-    "R15 (v1.1): the local attach is no slower than ssh-tmux on the same server. Measured as "
-    "{pairs} interleaved pairs on one server and one app process, alternating which transport goes "
-    "first in each pair so warm-up and drift fall on both equally. PASS when the median local time is "
-    "at most the median ssh-tmux time plus {tol:g}%. The margin is about twice the run-to-run spread "
-    "measured so far (about +/-5% around the median), so it absorbs noise without hiding a "
-    "consistent slowdown; ssh-tmux runs through scripts/remote-tmux-e2e-ssh-shim.sh, so it pays "
-    "no network or login cost."
+    "R15 (v1.1): the local attach is no slower than ssh-tmux on the same server. One uncounted "
+    "warm-up pair, then {pairs} pairs on one server and one app process; each pair times one local "
+    "and one ssh-tmux attach back to back, alternating which goes first. PASS when the median of the "
+    "{pairs} per-pair ratios (local time / ssh-tmux time) is at most {limit:.2f}, that is, local is "
+    "at most {tol:g}% slower in the typical pair. Comparing the two runs inside each pair cancels "
+    "the slow drift seen in the VM (ssh-tmux alone fell from 4.8 s to 2.5 s over 7 attaches); the "
+    "median ignores up to 3 outlier pairs; the {tol:g}% margin absorbs the noise that is left "
+    "without hiding a consistent slowdown. ssh-tmux runs through scripts/remote-tmux-e2e-ssh-shim.sh, "
+    "so it pays no network or login cost."
 )
 
 
@@ -172,13 +174,18 @@ def bench_attach(h, args, report):
     shim = os.path.join(h.repo, "scripts", "remote-tmux-e2e-ssh-shim.sh")
     tmpdir = os.path.join(h.state, "t14")
     server, sessions = build_attach_server(h, os.path.join(tmpdir, f"tmux-{os.getuid()}", "default"), args)
-    rule = T14_RULE.format(pairs=args.pairs, tol=args.attach_tolerance_pct)
+    ratio_limit = 1 + args.attach_tolerance_pct / 100.0
+    rule = T14_RULE.format(pairs=args.pairs, tol=args.attach_tolerance_pct, limit=ratio_limit)
     print(f"    rule: {rule}", flush=True)
     try:
         h.app.launch({"CMUX_REMOTE_TMUX_SSH_FOR_TESTING": shim, "TMUX_TMPDIR": tmpdir}, label="t14-shim")
         ssh = Mirror(h.cmux, {"host": "bench-shim-host"})
         local = Mirror(h.cmux, local_host(server.socket_path))
         have_local = bool(h.features.get("rpc"))
+        kinds = ("ssh", "local") if have_local else ("ssh",)
+        warmup = {k: time_attach(h, args, server, sessions, ssh if k == "ssh" else local, k, keep_log=True)
+                  for k in kinds}
+        print("    warm-up pair (not counted): " + ", ".join(f"{k} {v:.0f} ms" for k, v in warmup.items()), flush=True)
         times = {"ssh": [], "local": []}
         for pair in range(args.pairs):
             order = ("ssh", "local") if pair % 2 == 0 else ("local", "ssh")
@@ -186,7 +193,7 @@ def bench_attach(h, args, report):
                 if kind == "local" and not have_local:
                     continue
                 mirror = ssh if kind == "ssh" else local
-                times[kind].append(time_attach(h, args, server, sessions, mirror, kind, keep_log=pair == 0))
+                times[kind].append(time_attach(h, args, server, sessions, mirror, kind))
             print(f"    pair {pair + 1}: " + ", ".join(f"{k} {times[k][-1]:.0f} ms" for k in order if times[k]),
                   flush=True)
         ssh_median = statistics.median(times["ssh"])
@@ -205,20 +212,23 @@ def bench_attach(h, args, report):
             print(f"=== T14 (R15): ssh-tmux median {ssh_median:.0f} ms; local not implemented", flush=True)
             return False
         local_median = statistics.median(times["local"])
-        limit = ssh_median * (1 + args.attach_tolerance_pct / 100.0)
-        ok = local_median <= limit
-        faster_pairs = sum(1 for l, s in zip(times["local"], times["ssh"]) if l <= s)
+        ratios = [l / s for l, s in zip(times["local"], times["ssh"])]
+        median_ratio = statistics.median(ratios)
+        ok = median_ratio <= ratio_limit
+        faster_pairs = sum(1 for r in ratios if r <= 1.0)
         entry.update({
             "status": "PASS" if ok else "FAIL",
             "local_runs_ms": [round(t, 1) for t in times["local"]],
             "local_median_ms": round(local_median, 1),
-            "limit_ms": round(limit, 1),
-            "local_to_ssh_ratio": round(local_median / ssh_median, 3),
+            "pair_ratios": [round(r, 3) for r in ratios],
+            "median_pair_ratio": round(median_ratio, 3),
+            "ratio_limit": round(ratio_limit, 3),
             "pairs_where_local_was_no_slower": faster_pairs,
+            "warmup_ms": {k: round(v, 1) for k, v in warmup.items()},
         })
         report["T14"] = entry
-        print(f"=== T14 (R15): local median {local_median:.0f} ms, ssh-tmux median {ssh_median:.0f} ms "
-              f"(ratio {local_median / ssh_median:.2f}; limit {limit:.0f} ms = ssh + {args.attach_tolerance_pct:g}%; "
+        print(f"=== T14 (R15): median pair ratio local/ssh-tmux {median_ratio:.2f} against a limit of "
+              f"{ratio_limit:.2f} (local median {local_median:.0f} ms, ssh-tmux median {ssh_median:.0f} ms; "
               f"local no slower in {faster_pairs} of {args.pairs} pairs; the former absolute limit was "
               f"{args.attach_limit_ms:.0f} ms): {'PASS' if ok else 'FAIL'}", flush=True)
         return ok
