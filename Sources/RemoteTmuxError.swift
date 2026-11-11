@@ -45,6 +45,10 @@ enum RemoteTmuxError: Error, Sendable, Equatable {
 
     /// The local socket failed its re-check before a spawn. Carries the already localized reason.
     case localSocketRefused(String)
+
+    /// A local tmux command did not finish before its deadline, for example because the server is
+    /// stopped. Carries the socket path.
+    case localTmuxTimedOut(socketPath: String)
 }
 
 extension RemoteTmuxError {
@@ -158,6 +162,12 @@ extension RemoteTmuxError {
             return String(format: format, Self.sanitizedDetail(socketPath))
         case let .localSocketRefused(reason):
             return Self.sanitizedDetail(reason)
+        case let .localTmuxTimedOut(socketPath):
+            let format = String(
+                localized: "remoteTmux.error.localTmuxTimedOut",
+                defaultValue: "the tmux server at %@ did not answer in time; it may be frozen"
+            )
+            return String(format: format, Self.sanitizedDetail(socketPath))
         }
     }
 

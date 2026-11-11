@@ -108,6 +108,15 @@ struct RemoteTmuxLocalTransportProfile: RemoteTmuxTransportProfile {
     /// A local mirror whose server dies ends with a message (R19).
     var announcesEndedMirror: Bool { true }
 
+    /// A tmux command against a local server answers in milliseconds. Ten seconds matches ssh's
+    /// `ConnectTimeout` and the CLI's own deadline, so a stopped server (A15) fails the call
+    /// with a message instead of leaving a tmux process behind.
+    var oneShotDeadline: Duration? { .seconds(10) }
+
+    func oneShotTimeoutError(host: RemoteTmuxHost) -> RemoteTmuxError {
+        .localTmuxTimedOut(socketPath: host.serverSocketPath ?? "")
+    }
+
     /// Re-checks the socket before every spawn (R20). The boundary checked it once, but a
     /// reconnect can come long after, and the path may have changed hands in between.
     ///

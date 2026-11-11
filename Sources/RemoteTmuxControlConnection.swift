@@ -828,7 +828,7 @@ final class RemoteTmuxControlConnection {
                 self?.handleStdoutBackpressureOverflow()
             }
         )
-        stdoutPipeReader.attach(to: reader)
+        stdoutPipeReader.attach(to: reader, closingOnFinish: ownedPseudoTerminal != nil)
         let stderrPipeReader = RemoteTmuxProcessOutputReader(
             label: "com.cmux.remote-tmux.stderr.\(UUID().uuidString)",
             maxPendingChunks: Self.maxPendingStderrChunks,

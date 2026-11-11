@@ -204,6 +204,33 @@ import Testing
         #expect(host.transportProfile.refusalBeforeSpawn(host: host) == nil)
     }
 
+    /// A15: a tmux command against a stopped server ends at the deadline, and its process with it.
+    @Test func aLocalCommandThatNeverAnswersEndsAtTheDeadline() async throws {
+        let pidFile = NSTemporaryDirectory() + "remote-tmux-local-hang-\(UUID().uuidString).pid"
+        defer { try? FileManager.default.removeItem(atPath: pidFile) }
+        let fake = try FakeShell(body: "echo $$ > '\(pidFile)'; exec sleep 600")
+        defer { fake.cleanUp() }
+        let host = RemoteTmuxHost.local(serverSocketPath: "/tmp/cmux-lt-absent/default")
+        let transport = RemoteTmuxSSHTransport(host: host, sshExecutablePath: fake.path)
+        let start = ContinuousClock().now
+
+        await #expect(throws: RemoteTmuxError.localTmuxTimedOut(socketPath: "/tmp/cmux-lt-absent/default")) {
+            _ = try await transport.runTmux(["list-sessions"])
+        }
+
+        #expect(ContinuousClock().now - start < .seconds(20))
+        let pid = try #require(Int32((try? String(contentsOfFile: pidFile, encoding: .utf8))?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""))
+        // Foundation reaps the killed child on its own queue, so give it a moment to disappear.
+        var alive = true
+        for _ in 0..<40 where alive {
+            alive = kill(pid, 0) == 0
+            if alive { try await Task.sleep(for: .milliseconds(50)) }
+        }
+        #expect(!alive, "the hung command's process must not outlive the deadline")
+        #expect(!RemoteTmuxError.localTmuxTimedOut(socketPath: "/s").message.lowercased().contains("ssh"))
+    }
+
     @Test func onlyTheLocalTransportAnnouncesAnEndedMirror() {
         #expect(RemoteTmuxHost.local(serverSocketPath: "/tmp/x").transportProfile.announcesEndedMirror)
         #expect(!RemoteTmuxHost(destination: "user@host").transportProfile.announcesEndedMirror)
