@@ -190,12 +190,18 @@ def bench_input(h, args, report):
             raise CheckFailed(f"{error}; the plain terminal shows: {text}")
         time.sleep(0.5)
         plain = measure_typing(h.cmux, plain_surface, observer, args.keystrokes)
+        plain_p95 = percentile(plain, 0.95)
+        print(f"    plain client: p50 {percentile(plain, 0.5):.1f} ms, p95 {plain_p95:.1f} ms", flush=True)
+        # Detach the plain client through tmux, so only the observer and the mirror stay attached.
+        names = server.run("list-clients", "-F", "#{client_control_mode} #{client_name}").stdout.split("\n")
+        for line in names:
+            control, _, name = line.partition(" ")
+            if name and control != "1":
+                server.run("detach-client", "-t", name, check=False)
         h.cmux.call("workspace.close", {"workspace_id": plain_workspace})
         plain_workspace = None
         wait_until(lambda: not any(not c["control"] for c in server.clients()), timeout=10.0,
                    what="the plain client to go away")
-        plain_p95 = percentile(plain, 0.95)
-        print(f"    plain client: p50 {percentile(plain, 0.5):.1f} ms, p95 {plain_p95:.1f} ms", flush=True)
 
         if not h.features.get("rpc"):
             report["T15"] = {"status": "NOT-IMPLEMENTED", "detail": h.feature_notes.get("rpc"),
