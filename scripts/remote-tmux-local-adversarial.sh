@@ -240,7 +240,10 @@ p2_control() {
 
 # p2_oneshots <client-binary> <socket> <label>
 p2_oneshots() {
-  local bin="$1" sock="$2" label="$3" f="$ARTIFACTS/P2-$label-oneshots.txt"
+  # Two statements: bash 3.2 expands every word of one `local` before it
+  # assigns any, so `$label` would still be unset here under `set -u`.
+  local bin="$1" sock="$2" label="$3"
+  local f="$ARTIFACTS/P2-$label-oneshots.txt"
   : > "$f"
   local args
   for args in "-V" "list-sessions" "display-message -p #{version}" "list-windows -a" "new-window -d" "has-session -t main"; do
