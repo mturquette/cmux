@@ -111,34 +111,79 @@ def measure_typing(cmux, surface_id, observer, keystrokes):
     return samples
 
 
-def bench_attach(h, args, report):
-    server = Tmux(os.path.join(h.state, "attach.sock"), h.tmux_bin)
+def build_attach_server(h, socket_path, args):
+    server = Tmux(socket_path, h.tmux_bin)
     sessions = [f"b{i:02d}" for i in range(args.sessions)]
+    for name in sessions:
+        server.new_session(name)
+        for _ in range(args.windows - 1):
+            server.run("new-window", "-d", "-t", f"={name}")
+    return server, sessions
+
+
+def time_attaches(h, args, server, sessions, mirror, label):
+    """Times `args.runs` attaches of `mirror` and saves the app's debug log for the first."""
+    debug_log = f"/tmp/cmux-debug-{h.app.slug}.log"
+    timings = []
+    for run in range(args.runs):
+        offset = os.path.getsize(debug_log) if os.path.exists(debug_log) else 0
+        start = time.monotonic()
+        mirror.attach()
+
+        def all_published():
+            for name in sessions:
+                shape = mirror.shape(name)
+                if shape is None or len(shape) != args.windows:
+                    return False
+            return True
+        wait_until(all_published, timeout=60.0, interval=0.005, what=f"{label}: every workspace published")
+        timings.append((time.monotonic() - start) * 1000.0)
+        print(f"    {label} run {run + 1}: {timings[-1]:.0f} ms", flush=True)
+        if run == 0 and os.path.exists(debug_log):
+            # Where the time goes (Q-A8): the app's own records for this attach.
+            with open(debug_log, "rb") as handle:
+                handle.seek(offset)
+                segment = handle.read().decode("utf-8", "replace")
+            with open(os.path.join(h.artifacts, f"t14-{label}-debug.log"), "w") as out:
+                out.write(segment)
+        mirror.detach_all(sessions)
+        wait_until(lambda: not server.control_clients(), timeout=30.0, what=f"{label}: the mirror to detach")
+    return timings
+
+
+def bench_attach_ssh(h, args, report):
+    """Q-A8: the same server shape through ssh-tmux and the ssh shim, as the reference cost of
+    the shared mirror core. Recorded alongside T14; it does not decide R15."""
+    shim = os.path.join(h.repo, "scripts", "remote-tmux-e2e-ssh-shim.sh")
+    tmpdir = os.path.join(h.state, "sshref")
+    server, sessions = build_attach_server(h, os.path.join(tmpdir, f"tmux-{os.getuid()}", "default"), args)
     try:
-        for name in sessions:
-            server.new_session(name)
-            for _ in range(args.windows - 1):
-                server.run("new-window", "-d", "-t", f"={name}")
+        h.app.launch({"CMUX_REMOTE_TMUX_SSH_FOR_TESTING": shim, "TMUX_TMPDIR": tmpdir}, label="t14-ssh-shim")
+        timings = time_attaches(h, args, server, sessions, Mirror(h.cmux, {"host": "bench-shim-host"}), "ssh-shim")
+        report["T14-ssh-reference"] = {
+            "transport": "ssh-tmux through scripts/remote-tmux-e2e-ssh-shim.sh",
+            "runs_ms": [round(t, 1) for t in timings],
+            "median_ms": round(statistics.median(timings), 1),
+        }
+        print(f"    ssh-tmux reference: median {statistics.median(timings):.0f} ms", flush=True)
+    finally:
+        server.kill()
+        h.app.launch(label="base")
+
+
+def bench_attach(h, args, report):
+    try:
+        bench_attach_ssh(h, args, report)
+    except Exception as error:
+        report["T14-ssh-reference"] = {"error": str(error)}
+        print(f"    ssh-tmux reference could not be measured: {error}", flush=True)
+    server, sessions = build_attach_server(h, os.path.join(h.state, "attach.sock"), args)
+    try:
         mirror = Mirror(h.cmux, local_host(server.socket_path))
         if not h.features.get("rpc"):
             report["T14"] = {"status": "NOT-IMPLEMENTED", "detail": h.feature_notes.get("rpc")}
             return False
-        timings = []
-        for run in range(args.runs):
-            start = time.monotonic()
-            mirror.attach()
-
-            def all_published():
-                for name in sessions:
-                    shape = mirror.shape(name)
-                    if shape is None or len(shape) != args.windows:
-                        return False
-                return True
-            wait_until(all_published, timeout=30.0, interval=0.005, what="every workspace published")
-            timings.append((time.monotonic() - start) * 1000.0)
-            print(f"    run {run + 1}: {timings[-1]:.0f} ms", flush=True)
-            mirror.detach_all(sessions)
-            wait_until(lambda: not server.control_clients(), timeout=15.0, what="the mirror to detach")
+        timings = time_attaches(h, args, server, sessions, mirror, "local")
         median = statistics.median(timings)
         ok = median <= args.attach_limit_ms
         report["T14"] = {

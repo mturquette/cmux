@@ -262,16 +262,21 @@ def t3_two_way_sync(ctx):
     pane = first_pane(server, "t3")
     surface = surface_of(ctx, mirror, "t3", pane)
     app = ctx.h.app
+    # The mirror was attached without focus, so name its workspace: surface commands
+    # otherwise look for the surface in the selected workspace (Q-A4).
+    owner = ctx.h.cmux.workspace_of_surface(surface)
+    ctx.check(owner is not None, f"the mirrored pane's surface belongs to a workspace ({owner})")
+    workspace_id = owner or workspace_id
 
     # cmux -> tmux.
-    rc, out, err = app.cli(["new-split", "right", "--surface", surface])
+    rc, out, err = app.cli(["new-split", "right", "--workspace", workspace_id, "--surface", surface])
     ctx.check(rc == 0, f"cmux split exits 0 ({(out + err).strip()[:160]})")
     try:
         wait_until(lambda: server.windows("t3")[0]["panes"] == 2, what="tmux to show the split")
         ctx.check(True, "a split made in cmux appears in tmux")
     except CheckFailed as error:
         ctx.check(False, f"a split made in cmux appears in tmux ({error})")
-    rc, out, err = app.cli(["rename-tab", "--surface", surface, "t3-from-cmux"])
+    rc, out, err = app.cli(["rename-tab", "--workspace", workspace_id, "--surface", surface, "t3-from-cmux"])
     ctx.check(rc == 0, f"cmux rename exits 0 ({(out + err).strip()[:160]})")
     try:
         wait_until(lambda: any(w["name"] == "t3-from-cmux" for w in server.windows("t3")), what="tmux to show the rename")
@@ -611,6 +616,21 @@ def t11_ssh_unchanged(ctx):
     ctx.check(all(p.startswith(prefix) and p.endswith(expected_tail) for p in paths),
               f"the ControlMaster socket path is unchanged ({sorted(set(paths))[:2]}, expected {prefix}...{expected_tail})")
 
+    # Evidence for Q-A4 (log only, not part of R11): how renaming an ssh mirror tab by its
+    # surface id behaves on this build, without and then with the owning workspace named.
+    session = "t11-alpha"
+    pane = first_pane(server, session)
+    surface = mirror.surface_for_pane(session, pane)
+    owner = ctx.h.cmux.workspace_of_surface(surface) if surface else None
+    for label, args in (("--surface only", ["rename-tab", "--surface", str(surface), "t11-ren-a"]),
+                        ("--workspace and --surface", ["rename-tab", "--workspace", str(owner),
+                                                       "--surface", str(surface), "t11-ren-b"])):
+        rc, out, err = ctx.h.app.cli(args)
+        time.sleep(1.0)  # observation window for tmux to show a rename, log-only probe
+        names = [w["name"] for w in server.windows(session)]
+        ctx.log(f"Q-A4 probe, ssh mirror rename with {label}: exit {rc}, "
+                f"output {(out + err).strip()[:160]!r}, tmux window names now {names}")
+
 
 @test("T12", ["R12"], "The same session mirrored locally and over ssh at once", needs=["rpc"])
 def t12_local_and_ssh(ctx):
@@ -636,10 +656,14 @@ def t12_local_and_ssh(ctx):
     expect_shapes(ctx, local, {"t12": [1]})
     expect_shapes(ctx, remote, {"t12": [1]})
     pane = first_pane(server, "t12")
-    rc, _, _ = ctx.h.app.cli(["new-split", "right", "--surface", surface_of(ctx, local, "t12", pane)])
+    local_surface = surface_of(ctx, local, "t12", pane)
+    rc, _, _ = ctx.h.app.cli(["new-split", "right", "--workspace", ctx.h.cmux.workspace_of_surface(local_surface) or "",
+                              "--surface", local_surface])
     ctx.check(rc == 0, "a split in the local mirror is accepted")
     expect_shapes(ctx, remote, {"t12": [2]})
-    rc, _, _ = ctx.h.app.cli(["new-split", "down", "--surface", surface_of(ctx, remote, "t12", pane)])
+    remote_surface = surface_of(ctx, remote, "t12", pane)
+    rc, _, _ = ctx.h.app.cli(["new-split", "down", "--workspace", ctx.h.cmux.workspace_of_surface(remote_surface) or "",
+                              "--surface", remote_surface])
     ctx.check(rc == 0, "a split in the ssh mirror is accepted")
     expect_shapes(ctx, local, {"t12": [3]})
 
@@ -687,10 +711,35 @@ def t15_input_latency(ctx):
     raise Skipped("measured by scripts/remote-tmux-local-bench.sh in check.sh's bench stage")
 
 
+def lsof_listing(pid):
+    return subprocess.run(["lsof", "-n", "-P", "-p", str(pid)], stdout=subprocess.PIPE,
+                          stderr=subprocess.DEVNULL, text=True).stdout
+
+
 def count_fds(pid):
-    out = subprocess.run(["lsof", "-n", "-P", "-p", str(pid)], stdout=subprocess.PIPE,
-                         stderr=subprocess.DEVNULL, text=True).stdout
-    return max(0, len(out.splitlines()) - 1)
+    return max(0, len(lsof_listing(pid).splitlines()) - 1)
+
+
+def descriptor_kinds(listing):
+    """Counts lsof rows by (TYPE, NAME), with the NAME's per-process noise (pipe and socket
+    addresses, which change on every open) folded, so two listings can be compared."""
+    counts = {}
+    for line in listing.splitlines()[1:]:
+        parts = line.split(None, 8)
+        if len(parts) < 9:
+            continue
+        kind, name = parts[4], parts[8]
+        name = re.sub(r"0x[0-9a-f]+", "0x…", name)
+        counts[(kind, name)] = counts.get((kind, name), 0) + 1
+    return counts
+
+
+def descriptor_difference(before, after):
+    """Rows present more often in `after` than in `before`, as 'TYPE NAME (+n)' strings."""
+    a, b = descriptor_kinds(before), descriptor_kinds(after)
+    grown = [(k, b[k] - a.get(k, 0)) for k in b if b[k] > a.get(k, 0)]
+    grown.sort(key=lambda item: -item[1])
+    return [f"{kind} {name} (+{n})" for (kind, name), n in grown]
 
 
 def child_pids(pid):
@@ -715,7 +764,8 @@ def t16_leaks(ctx):
             raise CheckFailed("the control client stayed attached after detach")
 
     cycle()  # warm-up: first use may open long-lived resources
-    base_fds, base_children = count_fds(pid), len(child_pids(pid))
+    base_listing = lsof_listing(pid)
+    base_fds, base_children = max(0, len(base_listing.splitlines()) - 1), len(child_pids(pid))
     ctx.log(f"baseline: {base_fds} descriptors, {base_children} children")
     for _ in range(cycles):
         cycle()
@@ -726,8 +776,16 @@ def t16_leaks(ctx):
         wait_until(settled, timeout=15.0, interval=0.5, what="counts back at the baseline")
     except CheckFailed:
         pass
-    fds, children = count_fds(pid), len(child_pids(pid))
-    ctx.check(fds <= base_fds, f"after {cycles} cycles, descriptors are back at the baseline ({fds} vs {base_fds})")
+    end_listing = lsof_listing(pid)
+    fds, children = max(0, len(end_listing.splitlines()) - 1), len(child_pids(pid))
+    for name, listing in (("t16-lsof-baseline.txt", base_listing), ("t16-lsof-after.txt", end_listing)):
+        with open(os.path.join(ctx.h.artifacts, name), "w") as handle:
+            handle.write(listing)
+    grown = descriptor_difference(base_listing, end_listing)
+    if grown:
+        ctx.log("descriptors present after the cycles and not at the baseline: " + "; ".join(grown[:40]))
+    ctx.check(fds <= base_fds, f"after {cycles} cycles, descriptors are back at the baseline ({fds} vs {base_fds}; "
+              f"grown: {'; '.join(grown[:8]) or 'none'}; full listings in t16-lsof-*.txt)")
     ctx.check(children <= base_children, f"after {cycles} cycles, child processes are back at the baseline ({children} vs {base_children})")
     ctx.check(not server.control_clients(), "no cmux control client is left attached")
 
@@ -880,27 +938,35 @@ def t20_start_directory(ctx):
                 ctx.check(True, f"{label}: the session is mirrored")
             except CheckFailed as error:
                 ctx.check(False, f"{label}: the session is mirrored ({error})")
-            if not preexisting:
-                start = server.fmt(f"={target}", "#{session_path}")
+            # Raw tmux formats, logged for diagnosis only (Q-A4): on macOS pane_current_path
+            # is the physical path, and session_path read empty in integration round 1.
+            for fmt in ("#{session_path}", "#{pane_start_path}", "#{pane_current_path}"):
+                raw = server.run("display-message", "-p", "-t", f"={target}:0.0", fmt, check=False)
+                ctx.log(f"{label}: tmux {fmt} -> exit {raw.returncode}, stdout {raw.stdout!r}, stderr {raw.stderr.strip()!r}")
+            # The oracle is the first pane's own shell: its $PWD is what `pwd` shows the user,
+            # and it keeps a symlinked path as typed. NUL-separated, because case 5 has quotes
+            # and case 6's fallback must not be confused by the newline in the original path.
+            out_file = os.path.join(ctx.dir, f"pane-{index}.txt")
+            server.run("send-keys", "-t", f"={target}:0.0",
+                       f"printf '%s\\0%s\\0%s\\0' \"$PWD\" \"$PATH\" \"$T20_MARKER\" > '{out_file}'", "Enter")
+            try:
+                wait_until(lambda: os.path.exists(out_file) and open(out_file, "rb").read().count(b"\0") >= 3,
+                           timeout=10.0, what="the first pane's shell to report its directory and environment")
+                pane_pwd, pane_path, pane_marker = open(out_file, "rb").read().decode("utf-8", "replace").split("\0")[:3]
+            except CheckFailed as error:
+                ctx.check(False, f"{label}: {error}")
+                pane_pwd = pane_path = pane_marker = None
+            if not preexisting and pane_pwd is not None:
                 want = real_home if expect_home else expect_dir
-                ctx.check(start == want, f"{label}: the first window opens in {want!r} (got {start!r})")
+                ctx.check(pane_pwd == want, f"{label}: the first pane opens in {want!r} (its shell's $PWD is {pane_pwd!r})")
                 notice = [line for line in output.splitlines() if real_home in line]
                 if expect_home:
                     ctx.check(len(notice) == 1, f"{label}: one line says the home directory was used ({output[:200]!r})")
                     if notice:
                         localized_check(ctx, catalog, notice[0], f"{label} notice")
-            if env_check:
-                out_file = os.path.join(ctx.dir, f"env-{index}.txt")
-                server.run("send-keys", "-t", f"={target}:0.0",
-                           f"printf '%s\\n%s\\n' \"$PATH\" \"$T20_MARKER\" > '{out_file}'", "Enter")
-                try:
-                    wait_until(lambda: os.path.exists(out_file) and len(open(out_file).read().splitlines()) >= 2,
-                               timeout=10.0, what="the pane to report its environment")
-                    pane_path, pane_marker = open(out_file).read().splitlines()[:2]
-                    ctx.check(marker_dir in pane_path.split(":"), f"{label}: the pane's PATH is the calling shell's ({pane_path[:120]})")
-                    ctx.check(pane_marker == marker_value, f"{label}: the pane inherits the calling shell's environment")
-                except CheckFailed as error:
-                    ctx.check(False, f"{label}: {error}")
+            if env_check and pane_path is not None:
+                ctx.check(marker_dir in pane_path.split(":"), f"{label}: the pane's PATH is the calling shell's ({pane_path[:120]})")
+                ctx.check(pane_marker == marker_value, f"{label}: the pane inherits the calling shell's environment")
             mirror.detach_all(server.sessions())
         server.kill()
 
