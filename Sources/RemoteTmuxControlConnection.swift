@@ -837,7 +837,7 @@ final class RemoteTmuxControlConnection {
                 self?.handleStderrBackpressureOverflow()
             }
         )
-        stderrPipeReader.attach(to: errPipe.fileHandleForReading)
+        stderrPipeReader.attach(to: errPipe.fileHandleForReading, closingOnFinish: ownedPseudoTerminal != nil)
         // Process termination and pipe EOF are distinct events. Each reader drains
         // its descriptor before ending the stream so final `%exit` or stderr bytes
         // cannot be discarded by a faster termination callback.
