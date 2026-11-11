@@ -226,6 +226,12 @@ protocol RemoteTmuxTransportProfile: Sendable {
     /// R19 requires that a mirror whose server dies ends with a message.
     var announcesEndedMirror: Bool { get }
 
+    /// Whether a file pasted into a mirror pane has to be uploaded to the host first.
+    ///
+    /// True for ssh and et, whose panes run on another machine. The local transport's panes run
+    /// on this Mac and read the file where it is, so it reports false (R8).
+    var pastedFilesNeedUpload: Bool { get }
+
     /// The longest a one-shot command may run, or nil for no limit of cmux's own.
     ///
     /// nil for ssh and et, whose ssh options already bound a dead connection. The local
@@ -364,6 +370,9 @@ extension RemoteTmuxTransportProfile {
     func refusalBeforeSpawn(host: RemoteTmuxHost) -> RemoteTmuxError? { nil }
 
     var announcesEndedMirror: Bool { false }
+
+    /// A remote pane cannot read this Mac's files.
+    var pastedFilesNeedUpload: Bool { true }
 
     var oneShotDeadline: Duration? { nil }
 

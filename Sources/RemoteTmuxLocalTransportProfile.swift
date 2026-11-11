@@ -108,6 +108,9 @@ struct RemoteTmuxLocalTransportProfile: RemoteTmuxTransportProfile {
     /// A local mirror whose server dies ends with a message (R19).
     var announcesEndedMirror: Bool { true }
 
+    /// The panes run on this Mac, so a pasted image is inserted as its local path (R8).
+    var pastedFilesNeedUpload: Bool { false }
+
     /// A tmux command against a local server answers in milliseconds. Ten seconds matches ssh's
     /// `ConnectTimeout` and the CLI's own deadline, so a stopped server (A15) fails the call
     /// with a message instead of leaving a tmux process behind.

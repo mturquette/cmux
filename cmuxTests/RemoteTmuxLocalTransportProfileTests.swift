@@ -231,6 +231,15 @@ import Testing
         #expect(!RemoteTmuxError.localTmuxTimedOut(socketPath: "/s").message.lowercased().contains("ssh"))
     }
 
+    /// R8: a local mirror pane is on this Mac, so a pasted image goes in as its local path, while
+    /// ssh and et panes still upload it first.
+    @Test func onlyRemoteTransportsUploadPastedFiles() {
+        #expect(!RemoteTmuxHost.local(serverSocketPath: "/tmp/cmux-lt-absent/default").transportProfile
+            .pastedFilesNeedUpload)
+        #expect(RemoteTmuxHost(destination: "user@host").transportProfile.pastedFilesNeedUpload)
+        #expect(RemoteTmuxHost(destination: "box", transport: .et).transportProfile.pastedFilesNeedUpload)
+    }
+
     @Test func onlyTheLocalTransportAnnouncesAnEndedMirror() {
         #expect(RemoteTmuxHost.local(serverSocketPath: "/tmp/x").transportProfile.announcesEndedMirror)
         #expect(!RemoteTmuxHost(destination: "user@host").transportProfile.announcesEndedMirror)
