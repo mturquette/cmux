@@ -42,7 +42,7 @@ trap adv_cleanup EXIT
 CURRENT_ID="R17"
 
 enable_betas
-if ! app_responds; then
+if ! ensure_app; then
   fail "the tagged app ($TAG) is not answering on $APP_SOCKET"
   summary; exit "$FAILURES"
 fi
