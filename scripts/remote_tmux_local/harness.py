@@ -171,6 +171,20 @@ class Cmux:
     def current_workspace(self):
         return str(self.result("workspace.current").get("workspace_id") or "")
 
+    def workspace_of_surface(self, surface_id):
+        """The workspace that holds `surface_id`, as `surface.list` reports it, or None.
+
+        Surface-targeted CLI commands resolve the surface inside the routed workspace, which
+        is the selected one unless `--workspace` names another; a mirror attached without
+        focus is not selected, so callers pass the workspace this returns.
+        """
+        for row in self.workspaces():
+            listing = self.call("surface.list", {"workspace_id": row["id"]})
+            for surface in (listing.get("result") or {}).get("surfaces") or []:
+                if str(surface.get("id")) == str(surface_id):
+                    return row["id"]
+        return None
+
     def new_plain_workspace(self, select_it=True):
         """Creates an ordinary (non-mirror) workspace, selects it, and returns its id."""
         wsid = str(self.result("workspace.create", {}).get("workspace_id") or "")
