@@ -35,8 +35,7 @@ struct TmuxMirrorInvocation: Equatable {
             Each session becomes a workspace, each window a tab, and each multi-pane window a native split.
 
             By default it mirrors the server `tmux ls` would show in this shell: the current pane's
-            server inside tmux, otherwise the one chosen by TMUX_TMPDIR. When no server is running,
-            it starts one with a session in the current directory.
+            server inside tmux, otherwise the one chosen by TMUX_TMPDIR. When no server is running, it starts one with a session in the current directory.
 
             Flags:
               --socket-name <name>  The server tmux -L <name> would use
