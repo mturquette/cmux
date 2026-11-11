@@ -788,6 +788,10 @@ class Harness:
         print(f"    app={self.app.app_path}")
         print(f"    tmux={self.tmux_bin or '(none)'} {tmux_version(self.tmux_bin) if self.tmux_bin else ''}")
         print(f"    state={self.state} artifacts={self.artifacts}", flush=True)
+        running = self.app.pid()
+        answering = self.cmux.ping()
+        print(f"    tagged app at start: {'pid ' + str(running) if running else 'not running'}, "
+              f"socket {'answers' if answering else 'silent'}", flush=True)
 
     def prepare_app(self):
         """Turns the remote tmux beta on for the tagged bundle and starts the app with the base
