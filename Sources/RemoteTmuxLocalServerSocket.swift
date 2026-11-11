@@ -19,10 +19,20 @@ struct RemoteTmuxLocalServerSocket: Sendable, Equatable {
         case missing(path: String)
         case notASocket(path: String)
         case notOwnedByUser(path: String)
+        /// Someone else can replace files in the socket's directory.
+        case directoryNotPrivate(path: String)
 
         /// A localized, user-presentable reason. It talks about local tmux only.
         var message: String {
             switch self {
+            case let .directoryNotPrivate(path):
+                return String(
+                    format: String(
+                        localized: "remoteTmux.local.socket.directoryNotPrivate",
+                        defaultValue: "other users can replace files in %@, so the tmux socket there cannot be trusted"
+                    ),
+                    path
+                )
             case let .parameterNotAllowed(name):
                 return String(
                     format: String(
@@ -96,6 +106,25 @@ struct RemoteTmuxLocalServerSocket: Sendable, Equatable {
         guard lstat(canonical, &status) == 0 else { throw Refusal.missing(path: rawPath) }
         guard status.st_mode & S_IFMT == S_IFSOCK else { throw Refusal.notASocket(path: canonical) }
         guard status.st_uid == userID else { throw Refusal.notOwnedByUser(path: canonical) }
+        // The ownership check above is only as good as the directory around the socket: anyone who
+        // can write there can rename their own socket into place after it. tmux applies the same
+        // rule to its own socket directory.
+        let directory = (canonical as NSString).deletingLastPathComponent
+        var directoryStatus = stat()
+        guard stat(directory, &directoryStatus) == 0,
+              Self.isPrivateDirectory(directoryStatus, userID: userID)
+        else { throw Refusal.directoryNotPrivate(path: directory) }
         path = canonical
+    }
+
+    /// Whether only `userID` (or root) can replace entries in a directory with this status.
+    ///
+    /// The user's own directory may be group- or world-writable only if it is sticky, and the same
+    /// holds for a root-owned one such as `/private/tmp`. Any other owner is refused.
+    static func isPrivateDirectory(_ status: stat, userID: uid_t) -> Bool {
+        guard status.st_uid == userID || status.st_uid == 0 else { return false }
+        let writableByOthers = status.st_mode & (S_IWGRP | S_IWOTH) != 0
+        let sticky = status.st_mode & S_ISVTX != 0
+        return !writableByOthers || sticky
     }
 }

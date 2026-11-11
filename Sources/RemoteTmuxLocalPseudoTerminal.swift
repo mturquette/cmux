@@ -73,7 +73,7 @@ struct RemoteTmuxLocalPseudoTerminal {
         }
 
         // Unavoidable window: between openpty returning and these two calls, a child spawned by
-        // another thread can inherit both descriptors. The leak tests (T16, A6) cover it.
+        // another thread can inherit both descriptors. The descriptor leak tests cover it.
         guard fcntl(master, F_SETFD, FD_CLOEXEC) == 0,
               fcntl(slave, F_SETFD, FD_CLOEXEC) == 0
         else { throw failure(.closeOnExec) }

@@ -3,7 +3,7 @@ import Testing
 
 // TmuxServerSocketResolver.swift compiles into this target, so it needs no app import.
 
-/// `cmux tmux-mirror` mirrors the server `tmux ls` would show in the calling shell (R2, R21).
+/// `cmux tmux-mirror` mirrors the server `tmux ls` would show in the calling shell.
 @Suite struct TmuxServerSocketResolverTests {
     private func resolver(_ environment: [String: String]) -> TmuxServerSocketResolver {
         TmuxServerSocketResolver(environment: environment, userID: 501, currentDirectory: "/Users/me/work")

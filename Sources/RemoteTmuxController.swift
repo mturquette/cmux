@@ -854,7 +854,7 @@ final class RemoteTmuxController {
         for sessionMirror in sessionMirrors.values
         where !sessionMirror.connection.exited && sessionMirror.ownsSurface(surfaceId) {
             // A local mirror's panes read this Mac's files directly, so the pasted file needs
-            // no upload, and the normal local-path insertion runs instead (R8, from #8421).
+            // no upload, and the normal local-path insertion runs instead (an idea from #8421).
             guard sessionMirror.host.transportProfile.pastedFilesNeedUpload else { return nil }
             return .detectedSSH(sessionMirror.host.detectedSSHSession())
         }
@@ -981,26 +981,26 @@ final class RemoteTmuxController {
         workspaceId: UUID,
         reason: RemoteTmuxMirrorTeardownReason
     ) {
-        // R19: a local mirror whose session or server ended says so, on every teardown path
-        // below (multiplexed, kept open, or closed). The window is looked up first, while the
-        // dying workspace still names it.
-        let announcingManager = reason == .sessionEnded && host.transportProfile.announcesEndedMirror
-            ? AppDelegate.shared?.tabManagerFor(tabId: workspaceId) : nil
+        // When the server behind a mirror stops, its workspaces end without anything the user did,
+        // so the transport may post one notice for the whole server once its last mirror is gone.
+        // It runs after every teardown path below (multiplexed, kept open, or closed). The window
+        // is looked up first, while the dying workspace still names it.
+        let noticeManager = reason == .sessionEnded ? AppDelegate.shared?.tabManagerFor(tabId: workspaceId) : nil
         defer {
-            if let announcingManager,
-               let tabId = announcingManager.selectedTabId ?? announcingManager.tabs.first?.id {
+            if let noticeManager, !hostHasLiveMirror(host),
+               let notice = host.transportProfile.stoppedServerNotice(host: host),
+               let tabId = noticeManager.selectedTabId ?? noticeManager.tabs.first?.id {
+                // The store needs a workspace to hold the notice; the one left selected in the
+                // mirror's window is the closest to where the mirror was.
                 AppDelegate.shared?.notificationStore?.addNotification(
                     tabId: tabId,
                     surfaceId: nil,
-                    title: String(localized: "remoteTmux.local.mirrorEnded.title", defaultValue: "tmux session ended"),
-                    subtitle: sessionName,
-                    body: String(
-                        localized: "remoteTmux.local.mirrorEnded.body",
-                        defaultValue: "The session or its tmux server ended, so its mirror workspace was closed."
-                    ),
-                    // Without a key the store keeps one entry per tab, so each ended mirror would
-                    // silently replace the previous one's notice on the same tab.
-                    correlationKey: "remote-tmux-mirror-ended-\(host.connectionHash)-\(sessionName)"
+                    title: notice.title,
+                    subtitle: host.destination,
+                    body: notice.body,
+                    // Without a key the store keeps one entry per workspace, and this notice would
+                    // replace whatever else that workspace was showing.
+                    correlationKey: "remote-tmux-server-stopped-\(host.connectionHash)"
                 )
             }
         }

@@ -33,6 +33,9 @@ actor RemoteTmuxSSHTransport {
     /// The binary that runs one-shot commands with the profile's argv.
     private let oneShotExecutablePath: String
 
+    /// How long a one-shot may run, from the profile unless a caller overrides it.
+    private let oneShotDeadline: Duration?
+
     /// In-flight shared-master warmup, if any. ``ensureMasterReady()`` funnels every
     /// concurrent caller through this single task so the master is opened at most
     /// once even though the actor is reentrant across awaits (see that method).
@@ -44,16 +47,20 @@ actor RemoteTmuxSSHTransport {
     ///     (tests inject a fake). `nil` uses the profile's one-shot binary.
     ///   - transportProfile: overrides the host's profile (tests use it to exercise the seam
     ///     without a real transport). `nil` uses ``RemoteTmuxHost/transportProfile``.
+    ///   - oneShotDeadline: overrides the profile's ``RemoteTmuxTransportProfile/oneShotDeadline``,
+    ///     so a test can exercise the deadline in milliseconds. `nil` uses the profile's.
     init(
         host: RemoteTmuxHost,
         sshExecutablePath: String? = nil,
-        transportProfile: RemoteTmuxTransportProfile? = nil
+        transportProfile: RemoteTmuxTransportProfile? = nil,
+        oneShotDeadline: Duration? = nil
     ) {
         let profile = transportProfile ?? host.transportProfile
         self.host = host
         self.transportProfile = profile
         self.sshExecutablePath = sshExecutablePath ?? RemoteTmuxHost.defaultSSHExecutablePath()
         self.oneShotExecutablePath = sshExecutablePath ?? profile.oneShotExecutablePath()
+        self.oneShotDeadline = oneShotDeadline ?? profile.oneShotDeadline
     }
 
     // MARK: - High-level tmux operations
@@ -131,7 +138,7 @@ actor RemoteTmuxSSHTransport {
                 if try await serverSupportsRefreshClientSubscriptions() {
                     return
                 }
-                throw transportProfile.unsupportedTmuxError(detected: RemoteTmuxError.unknownVersionDisplayName)
+                throw RemoteTmuxError.unsupportedTmux(detected: RemoteTmuxError.unknownVersionDisplayName)
             }
             try assertSupportedTmuxVersion(version)
             return
@@ -144,7 +151,7 @@ actor RemoteTmuxSSHTransport {
 
     private func assertSupportedTmuxVersion(_ version: RemoteTmuxVersion) throws {
         if !version.meetsMinimum {
-            throw transportProfile.unsupportedTmuxError(detected: version.displayString)
+            throw RemoteTmuxError.unsupportedTmux(detected: version.displayString)
         }
     }
 
@@ -154,10 +161,20 @@ actor RemoteTmuxSSHTransport {
         var sessions = try await listSessions()
         if sessions.isEmpty, createIfEmpty {
             if let refusal = transportProfile.emptyServerRefusal(host: host) { throw refusal }
-            _ = try? await runTmux(["new-session", "-d"] + transportProfile.appCreatedSessionArguments())
+            // Only ssh and et get here: a transport that refuses an empty server returned above.
+            _ = try? await runTmux(["new-session", "-d"])
             sessions = try await listSessions()
         }
         return sessions
+    }
+
+    /// The `new-session` arguments for a detached session that cmux's UI creates, printing the
+    /// name tmux gave it. The profile adds where it starts (the home directory for a local server,
+    /// since the app's own working directory means nothing to the user).
+    nonisolated func detachedSessionArguments(name: String, columns: Int, rows: Int) -> [String] {
+        ["new-session", "-d", "-s", name, "-x", "\(columns)", "-y", "\(rows)"]
+            + transportProfile.appCreatedSessionArguments()
+            + ["-P", "-F", "#{session_name}"]
     }
 
     /// Runs a `tmux <args…>` command on the remote host and returns its result.
@@ -198,7 +215,7 @@ actor RemoteTmuxSSHTransport {
         let executable = oneShotExecutablePath
         let arguments = transportProfile.oneShotArgv(host: host, remoteCommand: remoteCommand)
         let environment = transportProfile.oneShotEnvironment(inheriting: ProcessInfo.processInfo.environment)
-        guard let deadline = transportProfile.oneShotDeadline else {
+        guard let deadline = oneShotDeadline else {
             return try await Self.runProcess(executable: executable, arguments: arguments, environment: environment)
         }
         return try await Self.runOneShotBeforeDeadline(
@@ -215,12 +232,12 @@ actor RemoteTmuxSSHTransport {
     /// A deadline, not a poll: the command and a single sleep race, the first to finish wins, and
     /// cancelling the loser stops the process through `runProcess`'s cancellation handler. It
     /// exists for transports with no timeout of their own: ssh has `ConnectTimeout` and
-    /// `ServerAlive*`, while a local tmux client facing a stopped server waits forever (A15), and
-    /// the app would keep one such process per call (R17).
+    /// `ServerAlive*`, while a local tmux client facing a stopped server waits forever, and
+    /// the app would keep one such process per call.
     private static func runOneShotBeforeDeadline(
         executable: String,
         arguments: [String],
-        environment: [String: String],
+        environment: [String: String]?,
         deadline: Duration,
         timeoutError: RemoteTmuxError
     ) async throws -> RemoteTmuxCommandResult {

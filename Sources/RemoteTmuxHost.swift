@@ -104,7 +104,9 @@ struct RemoteTmuxHost: Sendable, Equatable, Identifiable {
     }
 
     /// The name a local host shows where an ssh host shows its destination.
-    static let localDestination = "local"
+    static var localDestination: String {
+        String(localized: "remoteTmux.local.destination", defaultValue: "this Mac")
+    }
 
     /// A host for the tmux server listening on `serverSocketPath` on this Mac.
     ///

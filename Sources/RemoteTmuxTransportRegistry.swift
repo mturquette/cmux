@@ -193,18 +193,15 @@ protocol RemoteTmuxTransportProfile: Sendable {
     /// different servers.
     func tmuxServerArguments(host: RemoteTmuxHost) -> [String]
 
-    /// The environment one-shot commands run with, given the app's own. Defaults to the app's.
-    func oneShotEnvironment(inheriting base: [String: String]) -> [String: String]
+    /// The environment one-shot commands run with, given the app's own, or nil to inherit it
+    /// unchanged. Defaults to nil.
+    func oneShotEnvironment(inheriting base: [String: String]) -> [String: String]?
 
-    /// Whether the control stream runs on a pty cmux allocates itself rather than under
-    /// `/usr/bin/script`. Only meaningful when ``requiresPseudoTerminal`` is true.
-    ///
-    /// Defaults to false. See ``RemoteTmuxLocalPseudoTerminal`` for what an owned pty changes when
-    /// cmux crashes.
-    var ownsPseudoTerminal: Bool { get }
+    /// How the control stream gets its terminal. Defaults to the `script(1)` wrapper when
+    /// ``requiresPseudoTerminal`` is true, and to plain pipes otherwise.
+    var pseudoTerminal: RemoteTmuxPseudoTerminalKind { get }
 
-    /// Extra `new-session` arguments for a session the app itself creates because the server had
-    /// none. Defaults to none.
+    /// Extra `new-session` arguments for a session the app itself creates. Defaults to none.
     func appCreatedSessionArguments() -> [String]
 
     /// The error a whole-server mirror raises when the server has no sessions, or nil to start one.
@@ -220,16 +217,16 @@ protocol RemoteTmuxTransportProfile: Sendable {
     /// one-shot, so a check made once at the socket boundary cannot go stale. Defaults to nil.
     func refusalBeforeSpawn(host: RemoteTmuxHost) -> RemoteTmuxError?
 
-    /// Whether closing a mirror workspace because its session ended also posts a notification.
+    /// The notice to post when the last mirror of `host` has ended, or nil for none.
     ///
-    /// Defaults to false, which keeps ssh and et as they are. The local transport says so, because
-    /// R19 requires that a mirror whose server dies ends with a message.
-    var announcesEndedMirror: Bool { get }
+    /// Defaults to nil, which keeps ssh and et as they are. The local transport posts one when
+    /// the server itself has stopped, so a mirror whose server died does not vanish silently.
+    func stoppedServerNotice(host: RemoteTmuxHost) -> (title: String, body: String)?
 
     /// Whether a file pasted into a mirror pane has to be uploaded to the host first.
     ///
     /// True for ssh and et, whose panes run on another machine. The local transport's panes run
-    /// on this Mac and read the file where it is, so it reports false (R8).
+    /// on this Mac and read the file where it is, so it reports false.
     var pastedFilesNeedUpload: Bool { get }
 
     /// The longest a one-shot command may run, or nil for no limit of cmux's own.
@@ -241,11 +238,11 @@ protocol RemoteTmuxTransportProfile: Sendable {
     /// The error a one-shot that missed ``oneShotDeadline`` reports.
     func oneShotTimeoutError(host: RemoteTmuxHost) -> RemoteTmuxError
 
-    /// The error for "no tmux binary was found", worded for where this transport looks.
-    func tmuxNotFoundError(host: RemoteTmuxHost) -> RemoteTmuxError
-
-    /// The error for a tmux below ``RemoteTmuxVersion/minimumSupported``.
-    func unsupportedTmuxError(detected: String) -> RemoteTmuxError
+    /// `error` reworded for this transport before it reaches the user. Defaults to `error`.
+    ///
+    /// The shared code words its failures for a remote host reached over ssh. One mapping at the
+    /// socket boundary keeps that wording out of a transport that has neither.
+    func presentableError(_ error: RemoteTmuxError) -> RemoteTmuxError
 
     /// Whether the transport needs a pseudo-terminal rather than pipes.
     ///
@@ -346,30 +343,21 @@ extension RemoteTmuxTransportProfile {
     /// The remote tmux picks its own server.
     func tmuxServerArguments(host: RemoteTmuxHost) -> [String] { [] }
 
-    /// One-shots inherit the app's environment.
-    func oneShotEnvironment(inheriting base: [String: String]) -> [String: String] { base }
+    /// One-shots inherit the app's environment unchanged.
+    func oneShotEnvironment(inheriting base: [String: String]) -> [String: String]? { nil }
 
-    /// `/usr/bin/script` provides the pty.
-    var ownsPseudoTerminal: Bool { false }
+    var pseudoTerminal: RemoteTmuxPseudoTerminalKind {
+        requiresPseudoTerminal ? .scriptWrapper : .none
+    }
 
-    /// A remote server starts the session where tmux's own defaults put it.
     func appCreatedSessionArguments() -> [String] { [] }
-
-    /// The remote wording, which names the host and the install commands for it.
-    func tmuxNotFoundError(host: RemoteTmuxHost) -> RemoteTmuxError {
-        .tmuxNotFound(destination: host.destination)
-    }
-
-    func unsupportedTmuxError(detected: String) -> RemoteTmuxError {
-        .unsupportedTmux(detected: detected)
-    }
 
     /// A remote server with no sessions gets one, as before.
     func emptyServerRefusal(host: RemoteTmuxHost) -> RemoteTmuxError? { nil }
 
     func refusalBeforeSpawn(host: RemoteTmuxHost) -> RemoteTmuxError? { nil }
 
-    var announcesEndedMirror: Bool { false }
+    func stoppedServerNotice(host: RemoteTmuxHost) -> (title: String, body: String)? { nil }
 
     /// A remote pane cannot read this Mac's files.
     var pastedFilesNeedUpload: Bool { true }
@@ -379,6 +367,19 @@ extension RemoteTmuxTransportProfile {
     func oneShotTimeoutError(host: RemoteTmuxHost) -> RemoteTmuxError {
         .unreachable(host.destination)
     }
+
+    func presentableError(_ error: RemoteTmuxError) -> RemoteTmuxError { error }
+}
+
+/// How a transport's control stream gets a terminal.
+enum RemoteTmuxPseudoTerminalKind: Sendable, Equatable {
+    /// Plain pipes, which is all ssh needs.
+    case none
+    /// `/usr/bin/script` allocates the pty (see ``RemoteTmuxPseudoTerminal``).
+    case scriptWrapper
+    /// cmux allocates the pty itself (see ``RemoteTmuxLocalPseudoTerminal``), so the client is
+    /// hung up the moment cmux dies.
+    case owned
 }
 
 /// What end-of-stream on the control connection means.

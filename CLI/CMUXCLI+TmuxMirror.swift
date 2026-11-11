@@ -26,8 +26,16 @@ extension CMUXCLI {
             return
         }
 
-        if let notice = try startTmuxMirrorServerIfNeeded(socketPath: socketPath), !jsonOutput {
-            print(notice)
+        // Ask the app first, so a disabled feature or a refused socket fails before anything is
+        // created. Only the plain mirror starts a server, and only when none is running: `attach`
+        // names a session that has to exist already.
+        var startNotice: String?
+        if try tmuxMirrorServerIsMissing(params: params, socketPath: socketPath, client: client),
+           case .mirror = invocation.action {
+            startNotice = try startTmuxMirrorServerIfNeeded(socketPath: socketPath)
+        }
+        if let startNotice, !jsonOutput {
+            print(startNotice)
         }
         if let name = invocation.workspaceName?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
             params["workspace_name"] = name
@@ -48,11 +56,29 @@ extension CMUXCLI {
             ))
         }
         if jsonOutput {
-            print(jsonString(result))
+            var payload = result
+            if let startNotice { payload["start_notice"] = startNotice }
+            print(jsonString(payload))
         } else {
             let windowId = (result["window_id"] as? String) ?? ""
             let count = (result["workspace_ids"] as? [Any])?.count ?? 0
             print("OK socket=\(socketPath) workspaces=\(count) window=\(windowId)")
+        }
+    }
+
+    /// Whether no tmux server is running at `socketPath`, as the app sees it.
+    ///
+    /// The app answers first, so a disabled feature or a refused path stops the command before it
+    /// creates anything. A socket that does not exist yet is refused by the app as missing, and
+    /// that, alone among refusals, means "no server".
+    func tmuxMirrorServerIsMissing(params: [String: Any], socketPath: String, client: SocketClient) throws -> Bool {
+        do {
+            let result = try client.sendV2(method: "remote.tmux.sessions", params: params, waitUntilCompletion: true)
+            return ((result["sessions"] as? [Any]) ?? []).isEmpty
+        } catch let error as CLIError where error.v2Code == "invalid_params" {
+            var status = stat()
+            guard lstat(socketPath, &status) != 0, errno == ENOENT else { throw error }
+            return true
         }
     }
 
@@ -107,7 +133,7 @@ extension CMUXCLI {
     /// Runs tmux through the shared resolver, which also finds Homebrew and MacPorts installs.
     ///
     /// Bounded, because a frozen server, a hanging tmux, or a wrapper whose background child keeps
-    /// stderr open must produce a message instead of a CLI that never returns (R6, A3). stderr goes
+    /// stderr open must produce a message instead of a CLI that never returns. stderr goes
     /// to a temporary file rather than a pipe, so the CLI waits for tmux to exit, not for every
     /// holder of the pipe to close it. The wait is a deadline on that exit, not a poll.
     private func runTmuxForMirror(_ arguments: [String]) throws -> (status: Int32, stderr: String) {

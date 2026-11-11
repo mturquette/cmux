@@ -45,7 +45,7 @@ final class RemoteTmuxProcessOutputReader: @unchecked Sendable {
     /// - Parameter closingOnFinish: close the descriptor as soon as the stream finishes, from the
     ///   read source's cancel handler, instead of whenever the last reference to `handle` goes
     ///   away. A pty master needs this: until it closes, the descriptor stays open in cmux even
-    ///   though the connection that used it is gone (R17).
+    ///   though the connection that used it is gone.
     func attach(to handle: FileHandle, closingOnFinish: Bool = false) {
         let fileDescriptor = handle.fileDescriptor
         queue.async { [weak self] in

@@ -1,4 +1,5 @@
 import CmuxFoundation
+import Darwin
 import Foundation
 
 /// The local transport: tmux on this Mac, reached through its server socket, with no ssh at all.
@@ -13,8 +14,8 @@ import Foundation
 /// Homebrew or MacPorts install is found from a GUI app's bare PATH, and a missing binary is
 /// reported with the same sentinel.
 ///
-/// The control client runs on a pty cmux owns (``ownsPseudoTerminal``), so a crashed cmux drops its
-/// client at once instead of leaving it attached.
+/// The control client runs on a pty cmux owns (``RemoteTmuxPseudoTerminalKind/owned``), so a
+/// crashed cmux drops its client at once instead of leaving it attached.
 struct RemoteTmuxLocalTransportProfile: RemoteTmuxTransportProfile {
     /// The shell that runs the tmux resolver.
     static let shellPath = "/bin/sh"
@@ -69,12 +70,12 @@ struct RemoteTmuxLocalTransportProfile: RemoteTmuxTransportProfile {
 
     func oneShotExecutablePath() -> String { Self.shellPath }
 
-    func oneShotEnvironment(inheriting base: [String: String]) -> [String: String] {
+    func oneShotEnvironment(inheriting base: [String: String]) -> [String: String]? {
         base.filter { !Self.strippedEnvironmentKeys.contains($0.key) }
     }
 
     func childProcessEnvironment(inheriting base: [String: String]) -> [String: String] {
-        oneShotEnvironment(inheriting: base)
+        base.filter { !Self.strippedEnvironmentKeys.contains($0.key) }
     }
 
     /// No ssh, so no master to open, check or close.
@@ -83,8 +84,8 @@ struct RemoteTmuxLocalTransportProfile: RemoteTmuxTransportProfile {
     /// `tmux -CC` on a pipe fails at `tcgetattr`.
     var requiresPseudoTerminal: Bool { true }
 
-    /// The pty is cmux's own rather than `script(1)`'s; see the type's documentation.
-    var ownsPseudoTerminal: Bool { true }
+    /// cmux's own pty rather than `script(1)`'s; see the type's documentation.
+    var pseudoTerminal: RemoteTmuxPseudoTerminalKind { .owned }
 
     /// Killing the client closes its pty, so tmux drops the client by itself.
     var remoteHalfSurvivesLocalExit: Bool { false }
@@ -92,40 +93,95 @@ struct RemoteTmuxLocalTransportProfile: RemoteTmuxTransportProfile {
     /// There is no login to offer: the socket either is the user's or is refused.
     var authenticationIsSSHShaped: Bool { false }
 
-    /// Worded for this Mac rather than a remote host.
-    func tmuxNotFoundError(host: RemoteTmuxHost) -> RemoteTmuxError { .localTmuxNotFound }
-
-    func unsupportedTmuxError(detected: String) -> RemoteTmuxError {
-        .localTmuxUnsupported(detected: detected)
-    }
-
-    /// The CLI starts the first session from the user's shell (DESIGN.md D7), so an empty server
-    /// here means nothing is running, and that is reported rather than papered over (R6).
+    /// The CLI starts the first session from the user's shell, with its environment and working
+    /// directory, so an empty server here means nothing is running, and that is reported instead
+    /// of starting a server the user did not ask for.
     func emptyServerRefusal(host: RemoteTmuxHost) -> RemoteTmuxError? {
         .localServerNotRunning(socketPath: host.serverSocketPath ?? "")
     }
 
-    /// A local mirror whose server dies ends with a message (R19).
-    var announcesEndedMirror: Bool { true }
-
-    /// The panes run on this Mac, so a pasted image is inserted as its local path (R8).
+    /// The panes run on this Mac, so a pasted image is inserted as its local path.
     var pastedFilesNeedUpload: Bool { false }
 
     /// A tmux command against a local server answers in milliseconds. Ten seconds matches ssh's
-    /// `ConnectTimeout` and the CLI's own deadline, so a stopped server (A15) fails the call
-    /// with a message instead of leaving a tmux process behind.
+    /// `ConnectTimeout` and the CLI's own deadline, so a stopped server fails the call with a
+    /// message instead of leaving a tmux process behind.
     var oneShotDeadline: Duration? { .seconds(10) }
 
     func oneShotTimeoutError(host: RemoteTmuxHost) -> RemoteTmuxError {
         .localTmuxTimedOut(socketPath: host.serverSocketPath ?? "")
     }
 
-    /// Re-checks the socket before every spawn (R20). The boundary checked it once, but a
-    /// reconnect can come long after, and the path may have changed hands in between.
+    /// Posted when the server itself is gone, so a mirror whose server died does not vanish
+    /// silently. A session that ended while its server keeps running gets no notice, exactly as for
+    /// ssh-tmux, because the user usually ended it from cmux.
+    func stoppedServerNotice(host: RemoteTmuxHost) -> (title: String, body: String)? {
+        guard let path = host.serverSocketPath, !Self.serverAnswers(at: path) else { return nil }
+        return (
+            title: String(localized: "remoteTmux.local.serverStopped.title", defaultValue: "tmux server stopped"),
+            body: String(
+                format: String(
+                    localized: "remoteTmux.local.serverStopped.body",
+                    defaultValue: "The tmux server at %@ stopped, so its mirror workspaces ended."
+                ),
+                path
+            )
+        )
+    }
+
+    /// Whether something accepts connections on the socket. A Unix-domain connect answers at once:
+    /// it succeeds while a server listens and fails with ENOENT or ECONNREFUSED once it is gone.
+    static func serverAnswers(at path: String) -> Bool {
+        let descriptor = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard descriptor >= 0 else { return true }
+        defer { Darwin.close(descriptor) }
+        var address = sockaddr_un()
+        address.sun_family = sa_family_t(AF_UNIX)
+        let bytes = Array(path.utf8)
+        guard bytes.count < MemoryLayout.size(ofValue: address.sun_path) else { return true }
+        withUnsafeMutableBytes(of: &address.sun_path) { $0.copyBytes(from: bytes) }
+        let result = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                connect(descriptor, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+            }
+        }
+        return result == 0
+    }
+
+    /// Rewords the shared remote-host failures for this Mac, and names a tmux client and server of
+    /// different versions, which tmux reports as a protocol mismatch.
+    func presentableError(_ error: RemoteTmuxError) -> RemoteTmuxError {
+        switch error {
+        case .tmuxNotFound:
+            return .localTmuxNotFound
+        case let .unsupportedTmux(detected):
+            return .localTmuxUnsupported(detected: detected)
+        case let .launchFailed(detail):
+            return .localLaunchFailed(detail)
+        case let .commandFailed(exitCode, stderr):
+            if Self.reportsVersionMismatch(stderr) { return .localTmuxVersionMismatch(stderr) }
+            return .localCommandFailed(exitCode: exitCode, stderr: stderr)
+        case let .unreachable(detail):
+            if Self.reportsVersionMismatch(detail) { return .localTmuxVersionMismatch(detail) }
+            return .localUnreachable(detail)
+        default:
+            return error
+        }
+    }
+
+    /// tmux's wording when a client and server of different versions meet.
+    static func reportsVersionMismatch(_ text: String) -> Bool {
+        let lowered = text.lowercased()
+        return lowered.contains("protocol version mismatch") || lowered.contains("server version is too old")
+    }
+
+    /// Re-checks the socket before every spawn. The boundary checked it once, but a reconnect can
+    /// come long after, and the path may have changed hands in between.
     ///
     /// A path that no longer exists passes: tmux then reports "no server running" itself, which
-    /// the reconnect path already reads as the end of the mirror (R19). A path that exists but is
-    /// no longer a socket owned by this user, or now resolves somewhere else, is refused.
+    /// the reconnect path already reads as the end of the mirror. A path that exists but is no
+    /// longer a socket owned by this user, sits in a directory others can write to, or now
+    /// resolves somewhere else, is refused.
     func refusalBeforeSpawn(host: RemoteTmuxHost) -> RemoteTmuxError? {
         guard let path = host.serverSocketPath else { return nil }
         do {
@@ -139,7 +195,7 @@ struct RemoteTmuxLocalTransportProfile: RemoteTmuxTransportProfile {
         } catch let refusal as RemoteTmuxLocalServerSocket.Refusal {
             return .localSocketRefused(refusal.message)
         } catch {
-            return .localSocketRefused("\(error)")
+            return .localSocketRefused(RemoteTmuxLocalServerSocket.Refusal.notASocket(path: path).message)
         }
     }
 }
