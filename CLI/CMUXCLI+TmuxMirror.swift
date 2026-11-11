@@ -101,7 +101,15 @@ extension CMUXCLI {
         ))
     }
 
+    /// How long one tmux command may take before the CLI gives up on it.
+    static let tmuxMirrorCommandTimeoutSeconds = 10
+
     /// Runs tmux through the shared resolver, which also finds Homebrew and MacPorts installs.
+    ///
+    /// Bounded, because a frozen server, a hanging tmux, or a wrapper whose background child keeps
+    /// stderr open must produce a message instead of a CLI that never returns (R6, A3). stderr goes
+    /// to a temporary file rather than a pipe, so the CLI waits for tmux to exit, not for every
+    /// holder of the pipe to close it. The wait is a deadline on that exit, not a poll.
     private func runTmuxForMirror(_ arguments: [String]) throws -> (status: Int32, stderr: String) {
         let argv = RemoteTmuxCommandBuilder(arguments: arguments).remoteCommandArguments
         let process = Process()
@@ -113,13 +121,38 @@ extension CMUXCLI {
         process.environment = environment
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = FileHandle.nullDevice
-        let errPipe = Pipe()
-        process.standardError = errPipe
+        let stderrURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cmux-tmux-mirror-\(UUID().uuidString).stderr")
+        guard FileManager.default.createFile(atPath: stderrURL.path, contents: nil,
+                                             attributes: [.posixPermissions: 0o600]) else {
+            throw CLIError(message: String(
+                format: String(localized: "cli.tmuxMirror.error.tmuxFailed", defaultValue: "tmux-mirror: tmux failed: %@"),
+                stderrURL.path
+            ))
+        }
+        defer { try? FileManager.default.removeItem(at: stderrURL) }
+        let stderrHandle = try FileHandle(forWritingTo: stderrURL)
+        defer { try? stderrHandle.close() }
+        process.standardError = stderrHandle
+        // The one synchronous wait in this command: a deadline on tmux's exit, signalled by
+        // the termination handler, so a racing exit and timeout resolve exactly once.
+        let exited = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in exited.signal() }
         try process.run()
-        // tmux's stderr is a line or two; reading to EOF before waiting cannot fill the pipe.
-        let stderr = errPipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return (process.terminationStatus, String(decoding: stderr, as: UTF8.self))
+        let timeout = Self.tmuxMirrorCommandTimeoutSeconds
+        if exited.wait(timeout: .now() + .seconds(timeout)) == .timedOut {
+            process.terminate()
+            if exited.wait(timeout: .now() + .seconds(1)) == .timedOut {
+                kill(process.processIdentifier, SIGKILL)
+                _ = exited.wait(timeout: .now() + .seconds(1))
+            }
+            throw CLIError(message: String(
+                localized: "cli.tmuxMirror.error.tmuxTimedOut",
+                defaultValue: "tmux-mirror: tmux did not answer in time; the server may be frozen"
+            ))
+        }
+        let stderr = (try? String(contentsOf: stderrURL, encoding: .utf8)) ?? ""
+        return (process.terminationStatus, stderr)
     }
 
     private func printTmuxMirrorSessions(_ result: [String: Any], socketPath: String, jsonOutput: Bool) {

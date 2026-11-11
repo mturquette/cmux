@@ -25,7 +25,7 @@ import Testing
     }
 
     @Test func profileDescribesALocalPtyClientWithNoSSH() {
-        let profile = RemoteTmuxHost.local(serverSocketPath: "/tmp/tmux-501/default").transportProfile
+        let profile = RemoteTmuxHost.local(serverSocketPath: "/tmp/cmux-lt-absent/default").transportProfile
         #expect(profile is RemoteTmuxLocalTransportProfile)
         #expect(profile.requiresPseudoTerminal)
         #expect(profile.ownsPseudoTerminal)
@@ -55,14 +55,14 @@ import Testing
     @Test func oneShotsNameTheServerAndRunThroughTheLocalShell() async throws {
         let recorder = try ArgvRecorder()
         defer { recorder.cleanUp() }
-        let host = RemoteTmuxHost.local(serverSocketPath: "/tmp/tmux-501/default")
+        let host = RemoteTmuxHost.local(serverSocketPath: "/tmp/cmux-lt-absent/default")
         // The injected binary stands in for /bin/sh, so nothing runs tmux.
         let transport = RemoteTmuxSSHTransport(host: host, sshExecutablePath: recorder.executablePath)
 
         _ = try await transport.runTmux(["list-sessions"])
 
         let command = RemoteTmuxHost.tmuxRemoteCommand(
-            arguments: ["-S", "/tmp/tmux-501/default", "list-sessions"]
+            arguments: ["-S", "/tmp/cmux-lt-absent/default", "list-sessions"]
         )
         #expect(recorder.invocations() == [["-c", command]])
     }
@@ -71,14 +71,14 @@ import Testing
         let recorder = try ArgvRecorder()
         defer { recorder.cleanUp() }
         let transport = RemoteTmuxSSHTransport(
-            host: RemoteTmuxHost.local(serverSocketPath: "/tmp/tmux-501/default"),
+            host: RemoteTmuxHost.local(serverSocketPath: "/tmp/cmux-lt-absent/default"),
             sshExecutablePath: recorder.executablePath
         )
 
         #expect(try await transport.ensureMasterReady())
         await transport.shutdownMaster()
         RemoteTmuxSSHTransport.spawnControlMasterExit(
-            host: RemoteTmuxHost.local(serverSocketPath: "/tmp/tmux-501/default"),
+            host: RemoteTmuxHost.local(serverSocketPath: "/tmp/cmux-lt-absent/default"),
             sshExecutablePath: recorder.executablePath
         )
 
@@ -119,7 +119,7 @@ import Testing
         let fake = try FakeShell(body: "printf '%s\\n' '\(RemoteTmuxHost.tmuxNotFoundSentinel)' >&2; exit 127")
         defer { fake.cleanUp() }
         let transport = RemoteTmuxSSHTransport(
-            host: RemoteTmuxHost.local(serverSocketPath: "/tmp/tmux-501/default"),
+            host: RemoteTmuxHost.local(serverSocketPath: "/tmp/cmux-lt-absent/default"),
             sshExecutablePath: fake.path
         )
 
@@ -132,12 +132,12 @@ import Testing
         let fake = try FakeShell(body: """
         case "$2" in
           *"'-V'"*) printf 'tmux 3.1\\n'; exit 0 ;;
-          *) printf 'no server running on /tmp/tmux-501/default\\n' >&2; exit 1 ;;
+          *) printf 'no server running on /tmp/cmux-lt-absent/default\\n' >&2; exit 1 ;;
         esac
         """)
         defer { fake.cleanUp() }
         let transport = RemoteTmuxSSHTransport(
-            host: RemoteTmuxHost.local(serverSocketPath: "/tmp/tmux-501/default"),
+            host: RemoteTmuxHost.local(serverSocketPath: "/tmp/cmux-lt-absent/default"),
             sshExecutablePath: fake.path
         )
 
@@ -150,16 +150,78 @@ import Testing
         #expect(!RemoteTmuxError.localLaunchFailed("openpty").message.lowercased().contains("ssh"))
     }
 
+    /// R6 and D7: with no server running, the app refuses with its own message instead of
+    /// starting a server whose first session would miss the user's environment.
+    @Test func mirroringAnEmptyLocalServerIsRefusedAndStartsNothing() async throws {
+        let log = NSTemporaryDirectory() + "remote-tmux-local-calls-\(UUID().uuidString).log"
+        defer { try? FileManager.default.removeItem(atPath: log) }
+        let fake = try FakeShell(body: """
+        printf '%s\\n' "$2" >> '\(log)'
+        case "$2" in
+          *"'-V'"*) printf 'tmux 3.6a\\n'; exit 0 ;;
+          *) printf 'no server running on /tmp/x/default\\n' >&2; exit 1 ;;
+        esac
+        """)
+        defer { fake.cleanUp() }
+        let transport = RemoteTmuxSSHTransport(
+            host: RemoteTmuxHost.local(serverSocketPath: "/tmp/x/default"),
+            sshExecutablePath: fake.path
+        )
+
+        await #expect(throws: RemoteTmuxError.localServerNotRunning(socketPath: "/tmp/x/default")) {
+            _ = try await transport.discoverMirrorSessions(createIfEmpty: true)
+        }
+        let calls = (try? String(contentsOfFile: log, encoding: .utf8)) ?? ""
+        #expect(!calls.contains("'new-session'"))
+        let message = RemoteTmuxError.localServerNotRunning(socketPath: "/tmp/x/default").message
+        #expect(message.contains("/tmp/x/default"))
+        #expect(!message.lowercased().contains("ssh"))
+    }
+
+    /// R20 and A16: the socket is checked again before every spawn, not only at the boundary.
+    @Test func aSocketThatChangedHandsIsRefusedBeforeAnyCommandRuns() async throws {
+        let socket = try TemporarySocket()
+        defer { socket.cleanUp() }
+        let recorder = try ArgvRecorder()
+        defer { recorder.cleanUp() }
+        let host = RemoteTmuxHost.local(serverSocketPath: socket.canonicalPath)
+        let transport = RemoteTmuxSSHTransport(host: host, sshExecutablePath: recorder.executablePath)
+
+        // While the socket is the user's, commands run.
+        _ = try await transport.runTmux(["list-sessions"])
+        #expect(recorder.invocations().count == 1)
+
+        // The path is replaced by something that is not a socket.
+        try FileManager.default.removeItem(atPath: socket.canonicalPath)
+        FileManager.default.createFile(atPath: socket.canonicalPath, contents: Data())
+        await #expect(throws: RemoteTmuxError.self) { _ = try await transport.runTmux(["list-sessions"]) }
+        #expect(recorder.invocations().count == 1, "nothing may run once the socket fails its check")
+        let refusal = host.transportProfile.refusalBeforeSpawn(host: host)
+        #expect(refusal?.refusesEveryRetry == true)
+
+        // A path that is simply gone is left to tmux, which reports that no server is running.
+        try FileManager.default.removeItem(atPath: socket.canonicalPath)
+        #expect(host.transportProfile.refusalBeforeSpawn(host: host) == nil)
+    }
+
+    @Test func onlyTheLocalTransportAnnouncesAnEndedMirror() {
+        #expect(RemoteTmuxHost.local(serverSocketPath: "/tmp/x").transportProfile.announcesEndedMirror)
+        #expect(!RemoteTmuxHost(destination: "user@host").transportProfile.announcesEndedMirror)
+        #expect(!RemoteTmuxHost(destination: "box", transport: .et).transportProfile.announcesEndedMirror)
+        #expect(RemoteTmuxHost(destination: "user@host").transportProfile.emptyServerRefusal(
+            host: RemoteTmuxHost(destination: "user@host")) == nil)
+    }
+
     // MARK: Identity
 
     @Test func localIdentityIsTheSocketPathAlone() {
-        let a = RemoteTmuxHost.local(serverSocketPath: "/private/tmp/tmux-501/default")
-        let b = RemoteTmuxHost.local(serverSocketPath: "/private/tmp/tmux-501/default")
+        let a = RemoteTmuxHost.local(serverSocketPath: "/private/tmp/cmux-lt-absent/default")
+        let b = RemoteTmuxHost.local(serverSocketPath: "/private/tmp/cmux-lt-absent/default")
         let other = RemoteTmuxHost.local(serverSocketPath: "/private/tmp/tmux-501/alt")
         #expect(a.connectionHash == b.connectionHash)
         #expect(a.connectionHash != other.connectionHash)
         // An ssh host spelled to look like the local one is still a different endpoint.
-        let lookalike = RemoteTmuxHost(destination: "local", identityFile: "/private/tmp/tmux-501/default")
+        let lookalike = RemoteTmuxHost(destination: "local", identityFile: "/private/tmp/cmux-lt-absent/default")
         #expect(lookalike.connectionHash != a.connectionHash)
     }
 

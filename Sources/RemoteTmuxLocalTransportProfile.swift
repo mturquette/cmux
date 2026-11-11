@@ -98,4 +98,36 @@ struct RemoteTmuxLocalTransportProfile: RemoteTmuxTransportProfile {
     func unsupportedTmuxError(detected: String) -> RemoteTmuxError {
         .localTmuxUnsupported(detected: detected)
     }
+
+    /// The CLI starts the first session from the user's shell (DESIGN.md D7), so an empty server
+    /// here means nothing is running, and that is reported rather than papered over (R6).
+    func emptyServerRefusal(host: RemoteTmuxHost) -> RemoteTmuxError? {
+        .localServerNotRunning(socketPath: host.serverSocketPath ?? "")
+    }
+
+    /// A local mirror whose server dies ends with a message (R19).
+    var announcesEndedMirror: Bool { true }
+
+    /// Re-checks the socket before every spawn (R20). The boundary checked it once, but a
+    /// reconnect can come long after, and the path may have changed hands in between.
+    ///
+    /// A path that no longer exists passes: tmux then reports "no server running" itself, which
+    /// the reconnect path already reads as the end of the mirror (R19). A path that exists but is
+    /// no longer a socket owned by this user, or now resolves somewhere else, is refused.
+    func refusalBeforeSpawn(host: RemoteTmuxHost) -> RemoteTmuxError? {
+        guard let path = host.serverSocketPath else { return nil }
+        do {
+            let socket = try RemoteTmuxLocalServerSocket(validating: path)
+            guard socket.path == path else {
+                return .localSocketRefused(RemoteTmuxLocalServerSocket.Refusal.notASocket(path: path).message)
+            }
+            return nil
+        } catch RemoteTmuxLocalServerSocket.Refusal.missing {
+            return nil
+        } catch let refusal as RemoteTmuxLocalServerSocket.Refusal {
+            return .localSocketRefused(refusal.message)
+        } catch {
+            return .localSocketRefused("\(error)")
+        }
+    }
 }

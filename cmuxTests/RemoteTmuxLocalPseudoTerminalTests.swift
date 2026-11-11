@@ -114,6 +114,25 @@ import Testing
         #expect(await drained.value == expected)
     }
 
+    /// A19: a client that reads nothing (stopped with SIGSTOP, say) must not hold the writer's
+    /// queue forever. Nothing reads the slave here, so the pty fills and the write gives up.
+    @Test func writerGivesUpOnAPtyNobodyReads() throws {
+        let pty = try RemoteTmuxLocalPseudoTerminal()
+        defer { Self.closeAll(pty) }
+        let master = pty.masterReadHandle.fileDescriptor
+        try #require(fcntl(master, F_SETFL, fcntl(master, F_GETFL) | O_NONBLOCK) == 0)
+        let start = ContinuousClock().now
+
+        let written = RemoteTmuxControlPipeWriter.writeAll(
+            Data(repeating: 0x61, count: 256 * 1024),
+            to: pty.masterWriteHandle.fileDescriptor,
+            stallTimeoutMilliseconds: 200
+        )
+
+        #expect(!written)
+        #expect(ContinuousClock().now - start < .seconds(5))
+    }
+
     @Test func setupErrorNamesTheFailedCall() {
         let error = RemoteTmuxLocalPseudoTerminal.SetupError(step: .setAttributes, code: EBADF)
         #expect(error.description.hasPrefix("setAttributes: "))

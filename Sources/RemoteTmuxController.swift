@@ -1031,6 +1031,18 @@ final class RemoteTmuxController {
                     }
                 }
                 manager.closeWorkspace(workspace)
+                if host.transportProfile.announcesEndedMirror, let tabId = manager.selectedTabId {
+                    AppDelegate.shared?.notificationStore?.addNotification(
+                        tabId: tabId,
+                        surfaceId: nil,
+                        title: String(localized: "remoteTmux.local.mirrorEnded.title", defaultValue: "tmux session ended"),
+                        subtitle: sessionName,
+                        body: String(
+                            localized: "remoteTmux.local.mirrorEnded.body",
+                            defaultValue: "The session or its tmux server ended, so its mirror workspace was closed."
+                        )
+                    )
+                }
             case .explicitDetach:
                 // Detach is authoritative even for a pinned final mirror. Closing
                 // its owning window avoids stranding a blank `--new-window` shell.

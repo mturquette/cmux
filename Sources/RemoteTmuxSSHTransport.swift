@@ -153,6 +153,7 @@ actor RemoteTmuxSSHTransport {
         try await assertMinimumTmuxVersion(checkClientWhenNoServer: createIfEmpty)
         var sessions = try await listSessions()
         if sessions.isEmpty, createIfEmpty {
+            if let refusal = transportProfile.emptyServerRefusal(host: host) { throw refusal }
             _ = try? await runTmux(["new-session", "-d"] + transportProfile.appCreatedSessionArguments())
             sessions = try await listSessions()
         }
@@ -180,6 +181,7 @@ actor RemoteTmuxSSHTransport {
     /// transport never builds an ssh command line itself.
     @discardableResult
     func run(_ remoteArgs: [String]) async throws -> RemoteTmuxCommandResult {
+        if let refusal = transportProfile.refusalBeforeSpawn(host: host) { throw refusal }
         if transportProfile.usesSharedControlMaster {
             try host.ensureControlSocketDirectory()
         }

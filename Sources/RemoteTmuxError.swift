@@ -38,9 +38,23 @@ enum RemoteTmuxError: Error, Sendable, Equatable {
     /// The local tmux control client could not be started, for example because its pty could not
     /// be set up.
     case localLaunchFailed(String)
+
+    /// Nothing answers on the local server socket, and the local transport leaves starting a
+    /// server to the CLI. Carries the socket path.
+    case localServerNotRunning(socketPath: String)
+
+    /// The local socket failed its re-check before a spawn. Carries the already localized reason.
+    case localSocketRefused(String)
 }
 
 extension RemoteTmuxError {
+    /// Whether a reconnect that failed this way would fail the same way on every later attempt,
+    /// so the connection should end instead of backing off and retrying.
+    var refusesEveryRetry: Bool {
+        if case .localSocketRefused = self { return true }
+        return false
+    }
+
     static var unknownVersionDisplayName: String {
         String(localized: "remoteTmux.version.unknown", defaultValue: "unknown")
     }
@@ -136,6 +150,14 @@ extension RemoteTmuxError {
                 defaultValue: "failed to start local tmux: %@"
             )
             return String(format: format, Self.sanitizedDetail(detail))
+        case let .localServerNotRunning(socketPath):
+            let format = String(
+                localized: "remoteTmux.error.localServerNotRunning",
+                defaultValue: "no tmux server is running at %@; run cmux tmux-mirror from a shell to start one"
+            )
+            return String(format: format, Self.sanitizedDetail(socketPath))
+        case let .localSocketRefused(reason):
+            return Self.sanitizedDetail(reason)
         }
     }
 

@@ -735,6 +735,11 @@ final class RemoteTmuxControlConnection {
             throw RemoteTmuxError.launchFailed(detail)
         }
 
+        if let refusal = transportProfile.refusalBeforeSpawn(host: host) {
+            record("transport-refused-before-spawn")
+            stderrBuffer.append(refusal.message + "\n")
+            throw refusal
+        }
         let proc = Process()
         let transportExecutable = transportProfile.executablePath()
         // The last gate before this string becomes a process. Everything upstream validates its own
@@ -1571,6 +1576,13 @@ final class RemoteTmuxControlConnection {
         record("reconnect-attempt")
         do {
             try spawnProcess(mode: everReachedControlMode ? .attach : attachMode)
+        } catch let error as RemoteTmuxError where error.refusesEveryRetry {
+            // The next attempt would be refused the same way, so retrying would only hide it.
+            record("reconnect-refused")
+            connectionState = .ended
+            cancelScheduledWork()
+            teardownProcessHandles()
+            observers.notifyExit()
         } catch {
             scheduleReconnectAttempt()
         }
