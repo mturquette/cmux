@@ -994,7 +994,10 @@ final class RemoteTmuxController {
                     body: String(
                         localized: "remoteTmux.local.mirrorEnded.body",
                         defaultValue: "The session or its tmux server ended, so its mirror workspace was closed."
-                    )
+                    ),
+                    // Without a key the store keeps one entry per tab, so each ended mirror would
+                    // silently replace the previous one's notice on the same tab.
+                    correlationKey: "remote-tmux-mirror-ended-\(host.connectionHash)-\(sessionName)"
                 )
             }
         }
