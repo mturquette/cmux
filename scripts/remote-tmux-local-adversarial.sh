@@ -235,14 +235,37 @@ attack_A1() {
 attack_A2() {
   require_feature || return
   local sock dir out
-  # Before attach: socket missing.
+  # Before attach: socket missing. R1 and D7 make "no server at a path tmux
+  # can create" a reason to start one, not an error, so the three missing
+  # cases expect three different outcomes.
+  # (a) CLI, creatable path: a server is started there and mirrored (R1).
   sock="$(new_server a2a)"; dir="$(dirname "$sock")"
   t "$sock" kill-server
+  wait_until 5 bash -c "! '$TMUX_BIN' -S '$sock' ls"
   run_bounded 20 mirror_cli "$sock"; out="$RB_OUT"
-  [ "$RB_STATUS" -ne 0 ] && [ "$RB_STATUS" -ne 124 ] && pass "missing socket: refused in ${RB_ELAPSED}s" \
-    || fail "missing socket: status $RB_STATUS (124 means it hung): $out"
-  mentions_ssh "$out" && fail "missing socket message talks about ssh: $out" || pass "missing socket message has no ssh wording"
-  printf 'missing: %s\n' "$out" > "$ARTIFACTS/A2-messages.txt"
+  printf 'missing-creatable(%s): %s\n' "$RB_STATUS" "$out" > "$ARTIFACTS/A2-messages.txt"
+  [ "$RB_STATUS" -eq 0 ] && server_alive "$sock" && wait_until 10 has_control_client "$sock" \
+    && pass "missing socket at a creatable path: the CLI started a server and mirrored it (R1)" \
+    || fail "missing socket at a creatable path: status $RB_STATUS, server $(server_alive "$sock" && echo up || echo down): $out"
+  t "$sock" kill-server 2>/dev/null
+  # (b) CLI, socket inside a directory that does not exist: nothing can be
+  # created, so the CLI must refuse with a message about local tmux (R6).
+  sock="$ADV_TMP_ROOT/a2-no-such-dir/s"
+  run_bounded 20 mirror_cli "$sock"; out="$RB_OUT"
+  printf 'missing-dir(%s): %s\n' "$RB_STATUS" "$out" >> "$ARTIFACTS/A2-messages.txt"
+  ended_cleanly && [ "$RB_STATUS" -ne 0 ] && [ -n "$out" ] && pass "socket in a missing directory: refused in ${RB_ELAPSED}s" \
+    || fail "socket in a missing directory: status $RB_STATUS (124 means it hung): $out"
+  mentions_ssh "$out" && fail "missing-directory message talks about ssh: $out" || pass "missing-directory message has no ssh wording"
+  [ ! -e "$ADV_TMP_ROOT/a2-no-such-dir" ] && pass "nothing was created at the missing directory" \
+    || fail "the CLI created $ADV_TMP_ROOT/a2-no-such-dir"
+  # (c) Socket API, missing socket: the app never creates a server (D8), so
+  # this is R6's "socket missing" refusal.
+  sock="$ADV_TMP_ROOT/a2a/gone"
+  run_bounded 20 rpc remote.tmux.mirror "$(local_params "$sock")"
+  printf 'missing-rpc(%s): %s\n' "$RB_STATUS" "$RB_OUT" >> "$ARTIFACTS/A2-messages.txt"
+  [ "$RB_STATUS" -ne 124 ] && rpc_refused && ! mentions_ssh "$RB_OUT" \
+    && pass "socket API with a missing socket: refused with a local message" \
+    || fail "socket API with a missing socket: status $RB_STATUS: $RB_OUT"
 
   # Before attach: socket chmod 000.
   sock="$(new_server a2b)"; dir="$(dirname "$sock")"
@@ -312,13 +335,32 @@ EOF
   missing="$FAKES/missing"; mkdir -p "$missing"
   local msgs="$ARTIFACTS/A3-messages.txt"; : > "$msgs"
 
-  # Each case runs the CLI with the fake first on PATH. The CLI probes the
-  # server itself before asking the app (D7), so these messages come from it.
+  # Garbage on the CLI's PATH only. The fake exits 0, so the CLI's own probe
+  # (D7) sees a running server, which is true, and hands over to the app,
+  # which runs its own tmux. Mirroring is then correct; what must hold is a
+  # bounded run and no ssh wording.
   run_bounded 30 env PATH="$garbage:/usr/bin:/bin" "$ADV_REPO_ROOT/scripts/cmux-debug-cli.sh" tmux-mirror --socket-path "$sock" --no-focus
+  printf 'garbage-cli-only(%s): %s\n' "$RB_STATUS" "$RB_OUT" >> "$msgs"
+  ended_cleanly && ! mentions_ssh "$RB_OUT" \
+    && pass "garbage tmux on the CLI's PATH only: ended normally (status $RB_STATUS)" \
+    || fail "garbage tmux on the CLI's PATH only: status $RB_STATUS: $RB_OUT"
+  rpc remote.tmux.detach "$(local_params "$sock" main)" >/dev/null 2>&1
+  wait_until 10 no_control_clients "$sock"
+
+  # Garbage as the tmux the app runs: the app's version probe, one-shots and
+  # control stream all get garbage. The attach must be refused, in bounded
+  # time, without ssh wording.
+  RELAUNCHED=1
+  relaunch_app "PATH=$garbage:/usr/bin:/bin" || { fail "could not relaunch the app with the garbage tmux first on PATH"; return; }
+  run_bounded 40 mirror_rpc "$sock"
   local garbage_out="$RB_OUT" garbage_status="$RB_STATUS"
-  printf 'garbage(%s): %s\n' "$garbage_status" "$garbage_out" >> "$msgs"
-  [ "$garbage_status" -ne 0 ] && [ "$garbage_status" -ne 124 ] && pass "garbage tmux: refused" || fail "garbage tmux: status $garbage_status"
-  mentions_ssh "$garbage_out" && fail "garbage tmux message talks about ssh" || true
+  printf 'garbage-app(%s after %ss): %s\n' "$garbage_status" "$RB_ELAPSED" "$garbage_out" >> "$msgs"
+  [ "$garbage_status" -ne 124 ] && rpc_refused && pass "garbage tmux in the app: refused after ${RB_ELAPSED}s" \
+    || fail "garbage tmux in the app: not refused cleanly (status $garbage_status): $garbage_out"
+  mentions_ssh "$garbage_out" && fail "garbage tmux message talks about ssh: $garbage_out" || true
+  no_control_clients "$sock" && pass "garbage tmux in the app: nothing attached" || fail "garbage tmux in the app: a client attached"
+  relaunch_app || { fail "could not relaunch the app normally"; return; }
+  RELAUNCHED=""
 
   : > "$FAKES/hang.pids"
   run_bounded 90 env PATH="$hang:/usr/bin:/bin" "$ADV_REPO_ROOT/scripts/cmux-debug-cli.sh" tmux-mirror --socket-path "$sock" --no-focus
@@ -361,31 +403,62 @@ EOF
 attack_A4() {
   require_feature || return
   if [ -x "$TMUX_OLD_BIN" ]; then
+    local old_dir; old_dir="$(dirname "$TMUX_OLD_BIN")"
+    # (a) A Mac whose tmux is 3.2a: server, CLI and app all use 3.2a. R6
+    # refuses only tmux older than 3.2, so this must mirror. A tmux client
+    # and server must share a protocol version, so the app is relaunched with
+    # 3.2a first on its PATH, and the tmux-side checks use 3.2a too.
     local sock; sock="$(new_server a4old "$TMUX_OLD_BIN")"
-    run_bounded 30 env PATH="$(dirname "$TMUX_OLD_BIN"):/usr/bin:/bin" "$ADV_REPO_ROOT/scripts/cmux-debug-cli.sh" tmux-mirror --socket-path "$sock" --no-focus
-    # A 3.6a client cannot talk to a 3.2a server, so the tmux-side checks use
-    # the old binary for this server.
+    RELAUNCHED=1
+    relaunch_app "PATH=$old_dir:/usr/bin:/bin" || { fail "could not relaunch the app with tmux 3.2a first on PATH"; return; }
+    run_bounded 30 env PATH="$old_dir:/usr/bin:/bin" "$(cli_path)" tmux-mirror --socket-path "$sock" --no-focus
+    printf 'v32a-coherent(%s): %s\n' "$RB_STATUS" "$RB_OUT" > "$ARTIFACTS/A4-messages.txt"
     if [ "$RB_STATUS" -eq 0 ] && TMUX_BIN="$TMUX_OLD_BIN" wait_until 10 has_control_client "$sock"; then
-      pass "$("$TMUX_OLD_BIN" -V) server mirrors"
+      pass "$("$TMUX_OLD_BIN" -V) everywhere: the server mirrors"
       "$TMUX_OLD_BIN" -S "$sock" new-window -t main
       wait_until 5 window_count_is "$sock" 2 \
         && pass "a window added on the 3.2a server reaches the mirror" \
         || fail "a window added on the 3.2a server did not reach the mirror"
     else
-      fail "$("$TMUX_OLD_BIN" -V) (the supported minimum) did not mirror: $RB_OUT"
+      fail "$("$TMUX_OLD_BIN" -V) everywhere (the supported minimum) did not mirror: $RB_OUT"
+    fi
+    "$TMUX_OLD_BIN" -S "$sock" kill-server 2>/dev/null
+    relaunch_app || { fail "could not relaunch the app normally"; return; }
+    RELAUNCHED=""
+    # (b) A 3.2a server with the app's newer tmux as client: tmux cannot
+    # attach across protocol versions (Q-A6). The refusal must say so, not
+    # fall back to a generic failure; Q-A6's option 1 words this message.
+    sock="$(new_server a4mixed "$TMUX_OLD_BIN")"
+    run_bounded 30 mirror_rpc "$sock"
+    printf 'v32a-server-newer-client(%s): %s\n' "$RB_STATUS" "$RB_OUT" >> "$ARTIFACTS/A4-messages.txt"
+    if [ "$RB_STATUS" -ne 124 ] && rpc_refused; then
+      printf '%s' "$RB_OUT" | grep -qiE 'version|protocol' \
+        && pass "3.2a server with a newer client: refused, and the message names the version mismatch" \
+        || fail "3.2a server with a newer client: refused, but the message does not name the version mismatch: $RB_OUT"
+    else
+      fail "3.2a server with a newer client: status $RB_STATUS, not a clean refusal: $RB_OUT"
     fi
     "$TMUX_OLD_BIN" -S "$sock" kill-server 2>/dev/null
   else
     skip "TMUX_OLD_BIN ($TMUX_OLD_BIN) is not installed"
   fi
-  # A fake that reports 3.1 for -V and for the server's #{version}.
+  # A fake that reports 3.1 for -V and for the server's #{version}, and
+  # rejects `refresh-client -B` the way tmux before 3.2 does. Plain if/case
+  # on separate lines: bash 3.2 as /bin/sh rejected the nested one-line case.
   local fake31; fake31="$(make_fake v31 <<EOF
-for a in "\$@"; do
-  case "\$a" in
-    -V) echo "tmux 3.1"; exit 0 ;;
-    *'#{version}'*) case " \$* " in *" refresh-client "*) echo "unknown flag -B" >&2; exit 1 ;; esac; echo "3.1"; exit 0 ;;
-  esac
-done
+all=" \$* "
+case "\$all" in
+  *" -V "*)
+    echo "tmux 3.1"; exit 0 ;;
+esac
+case "\$all" in
+  *" refresh-client "*)
+    echo "unknown flag -B" >&2; exit 1 ;;
+esac
+case "\$all" in
+  *"#{version}"*)
+    echo "3.1"; exit 0 ;;
+esac
 exec "$REAL_TMUX" "\$@"
 EOF
 )"
@@ -482,11 +555,28 @@ attack_A7() {
   ( mirror_rpc "$sock" > "$o1" 2>&1 ) & local p1=$!
   ( mirror_rpc "$sock" > "$o2" 2>&1 ) & local p2=$!
   wait "$p1"; local s1=$?; wait "$p2"; local s2=$?
-  [ "$s1" -eq 0 ] && [ "$s2" -eq 0 ] && pass "both racing calls returned success" \
-    || fail "racing calls: statuses $s1 and $s2: $(cat "$o1") / $(cat "$o2")"
+  # DESIGN A7: one mirror per server key. R9: the local mirror behaves as
+  # ssh-tmux does, and ssh-tmux refuses a concurrent second attach for the
+  # same host through its single-flight check. So one call must succeed, and
+  # the other either succeeds too or gets that explicit refusal.
+  local okc=0 refusedc=0 o
+  for o in "$o1" "$o2"; do
+    if grep -q '"mirrored" *: *true\|mirrored.*true' "$o"; then okc=$((okc + 1))
+    elif grep -qi 'already attaching' "$o"; then refusedc=$((refusedc + 1)); fi
+  done
+  [ "$okc" -ge 1 ] && [ $((okc + refusedc)) -eq 2 ] \
+    && pass "racing calls: $okc mirrored, $refusedc refused as already attaching" \
+    || fail "racing calls: statuses $s1 and $s2, not one success plus success or single-flight refusal: $(cat "$o1") / $(cat "$o2")"
   sleep 2
   local n; n="$(control_clients_on "$sock" main)"
   [ "$n" -eq 1 ] && pass "exactly one control client for the server key" || fail "$n control clients for one session (expected 1)"
+  # A later call for the same server must not add a second client either.
+  run_bounded 30 mirror_rpc "$sock"
+  printf 'third(%s): %s\n' "$RB_STATUS" "$RB_OUT" > "$ARTIFACTS/A7-third.txt"
+  sleep 2
+  n="$(control_clients_on "$sock" main)"
+  [ "$n" -eq 1 ] && pass "a later call kept one control client (status $RB_STATUS)" \
+    || fail "a later call left $n control clients for one session"
   # A second, foreign control client (a stand-in for iTerm2's -CC) on the
   # same session: both must stay usable.
   local fifo="$ADV_TMP_ROOT/a7.fifo"; mkfifo "$fifo"
@@ -501,7 +591,9 @@ attack_A7() {
   printf 'detach-client\n' >&8; exec 8>&-
   wait_until 5 bash -c "! kill -0 $fpid 2>/dev/null"; kill "$fpid" 2>/dev/null
   # shellcheck disable=SC2086
-  detach_mirror_workspaces "$sock" $(workspace_ids_from "$(cat "$o1")") $(workspace_ids_from "$(cat "$o2")")
+  detach_mirror_workspaces "$sock" $(workspace_ids_from "$(cat "$o1")") $(workspace_ids_from "$(cat "$o2")") \
+    $(workspace_ids_from "$(sed 's/^third([0-9]*): //' "$ARTIFACTS/A7-third.txt")")
+  t "$sock" kill-server 2>/dev/null
 }
 
 # ---- A8: rename or kill the mirrored session from outside ---------------------
@@ -663,14 +755,18 @@ attack_A13() {
   require_feature || return
   local gate="$ADV_TMP_ROOT/a13gate"; mkdir -p "$gate"
   # The fake runs the real tmux, then, after a "no server" list-sessions,
-  # announces it and waits for the scenario to release it.
+  # announces it and waits for the scenario to release it. It logs every
+  # argv it gets, so a run that never pauses shows what the CLI ran. The wait
+  # is capped at 8 s, under the CLI's 10 s deadline for its tmux probe.
+  local argv_log="$ADV_TMP_ROOT/a13-argv.log"; : > "$argv_log"
   local pause; pause="$(make_fake pause <<EOF
+printf '%s | PATH=%s\n' "\$*" "\$PATH" >> "$argv_log"
 "$REAL_TMUX" "\$@"; rc=\$?
 case " \$* " in
   *" list-sessions "*|*" ls "*)
     if [ \$rc -ne 0 ]; then
       touch "$gate/paused"
-      i=0; while [ ! -e "$gate/go" ] && [ \$i -lt 300 ]; do sleep 0.1; i=\$((i+1)); done
+      i=0; while [ ! -e "$gate/go" ] && [ \$i -lt 80 ]; do sleep 0.1; i=\$((i+1)); done
     fi ;;
 esac
 exit \$rc
@@ -695,9 +791,10 @@ EOF
     [ "$(control_clients "$sock")" -ge 1 ] && pass "the mirror attached" || fail "the mirror did not attach"
     info "control clients per session: $(t "$sock" list-clients -F '#{client_control_mode} #{session_name}' | tr '\n' ';')"
   else
-    fail "the CLI never ran list-sessions through PATH's tmux (did it probe some other way?)"
     touch "$gate/go"; wait "$cpid"
+    fail "the CLI never paused in a failing list-sessions; status $(cat "$ADV_TMP_ROOT/a13.rc" 2>/dev/null), output: $(head -c 300 "$ADV_TMP_ROOT/a13.out"); fake saw: $(tr '\n' ';' < "$argv_log" | head -c 600)"
   fi
+  cp "$argv_log" "$ARTIFACTS/A13-argv-race1.log" 2>/dev/null; : > "$argv_log"
   t "$sock" kill-server 2>/dev/null
   wait_until 5 bash -c "! '$TMUX_BIN' -S '$sock' ls"
   # Race 2: the start directory disappears between the check and new-session.
@@ -718,8 +815,10 @@ EOF
         || fail "start dir removed mid-flow: status $rc2 with message '$out2'"
     fi
   else
-    fail "the CLI never paused for race 2"; touch "$gate/go"; wait "$cpid"
+    touch "$gate/go"; wait "$cpid"
+    fail "the CLI never paused for race 2; status $(cat "$ADV_TMP_ROOT/a13b.rc" 2>/dev/null), output: $(head -c 300 "$ADV_TMP_ROOT/a13b.out"); fake saw: $(tr '\n' ';' < "$argv_log" | head -c 600)"
   fi
+  cp "$argv_log" "$ARTIFACTS/A13-argv-race2.log" 2>/dev/null
 }
 
 # ---- A14: socket_path symlinked to another user's socket, or swapped ----------
