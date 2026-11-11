@@ -21,6 +21,18 @@
 # whether tmux writes a `%subscription-changed` value raw, so that a directory
 # name containing a newline can inject control-mode lines (see A9).
 #
+# A15 to A21 are not in DESIGN.md. They came from an adversarial review of
+# track A's diff (tl/a-transport), aimed at paths A1 to A14 do not reach:
+#   A15 a frozen (SIGSTOPped) server: the CLI's probe and the app's attach
+#       must both end within a bound
+#   A16 the socket path is taken over by another user's server after the
+#       attach, then the app reconnects: the boundary check ran only once
+#   A17 no pty available (openpty fails): clear error, no leaked descriptor
+#   A18 30 server-side detaches: the reconnect path allocates a pty each time
+#   A19 the control client is stopped (SIGSTOP), then detached or continued
+#   A20 a relative, long or deleted-cwd socket location from the CLI
+#   A21 a wrapper tmux whose child holds stderr open after tmux exits
+#
 # MANUAL CASES (need a tagged build and a person at the VM's screen; results
 # go to results/ as a run log):
 #
@@ -48,7 +60,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.." || exit 2
 source scripts/remote-tmux-local-adversarial-lib.sh
 
-ALL_IDS="P1 A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A13 A14"
+ALL_IDS="P1 A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A13 A14 A15 A16 A17 A18 A19 A20 A21"
 ONLY=""
 ARTIFACTS=""
 while [ $# -gt 0 ]; do
@@ -746,6 +758,252 @@ attack_A14() {
     && pass "the swap race never reached the other user's server" || fail "the swap race attached to another user's server"
   sudo -n -u nobody "$TMUX_BIN" -S "$other_sock" kill-server 2>/dev/null
   sudo -n rm -rf "$other_dir"
+}
+
+# ---- helpers for A15 to A21 ----------------------------------------------------
+cli_path() { printf '%s\n' "$ADV_REPO_ROOT/scripts/cmux-debug-cli.sh"; }
+server_pid() { t "$1" display-message -p '#{pid}' 2>/dev/null; }
+control_client_pid() {
+  t "$1" list-clients -F '#{client_control_mode} #{client_pid}' 2>/dev/null | awk '$1 == 1 { print $2; exit }'
+}
+# The run ended by itself (not killed by the bound) and without a signal.
+ended_cleanly() { [ "$RB_STATUS" -ne 124 ] && [ "$RB_STATUS" -lt 128 ]; }
+# Predicates for wait_until, which re-runs them on every poll.
+no_tmux_children() { [ "$(tmux_descendant_count "$(app_pid)")" -eq 0 ]; }
+fds_at_most() { [ "$(fd_count "$1")" -le "$2" ]; }
+
+# ---- A15: a frozen server ----------------------------------------------------------
+# The server's socket accepts connections (the kernel queues them) but nothing
+# answers. The CLI's own probe (`list-sessions`, run before any RPC) and the
+# app's attach must both end within a bound and leave no tmux process behind.
+attack_A15() {
+  require_feature || return
+  local sock pid
+  sock="$(new_server a15)"
+  pid="$(server_pid "$sock")"
+  [ -n "$pid" ] || { fail "could not read the server's pid"; return; }
+  kill -STOP "$pid"
+  run_bounded 90 mirror_cli "$sock"
+  printf 'cli(%s after %ss): %s\n' "$RB_STATUS" "$RB_ELAPSED" "$RB_OUT" > "$ARTIFACTS/A15.txt"
+  [ "$RB_STATUS" -ne 124 ] && pass "the CLI gave up on a frozen server after ${RB_ELAPSED}s" \
+    || fail "the CLI was still waiting on a frozen server after 90 s (its tmux probe has no time limit)"
+  [ "$RB_STATUS" -ne 0 ] || fail "the CLI reported success against a frozen server"
+  run_bounded 90 mirror_rpc "$sock"
+  printf 'rpc(%s after %ss): %s\n' "$RB_STATUS" "$RB_ELAPSED" "$RB_OUT" >> "$ARTIFACTS/A15.txt"
+  [ "$RB_STATUS" -ne 124 ] && pass "the app's attach to a frozen server ended after ${RB_ELAPSED}s" \
+    || fail "the app's attach to a frozen server was still waiting after 90 s"
+  wait_until 15 no_tmux_children \
+    && pass "no tmux process is left waiting on the frozen server" \
+    || fail "$(tmux_descendant_count "$(app_pid)") tmux processes still wait on the frozen server"
+  kill -CONT "$pid"
+  t "$sock" kill-server 2>/dev/null
+  assert_app_healthy
+}
+
+# ---- A16: the socket path changes hands after the attach --------------------------
+# The boundary checks ownership when the RPC arrives. Here the mirrored
+# server's socket is moved aside (the server keeps running on its open
+# listening socket), another user's server is started at the same path, and
+# cmux's client is detached from outside, so the app reconnects to that path.
+attack_A16() {
+  require_feature || return
+  if ! sudo -n true 2>/dev/null; then
+    skip "needs passwordless sudo to start another user's server"; return
+  fi
+  local dir="$ADV_TMP_ROOT/a16"
+  mkdir -p "$dir"; chmod 777 "$dir"   # writable by the other user, and not sticky
+  local sock="$dir/s"
+  "$TMUX_BIN" -S "$sock" -f /dev/null new-session -d -s main || { fail "could not start the server"; return; }
+  track_server "$sock"
+  run_bounded 30 mirror_rpc "$sock"
+  local ids; ids="$(workspace_ids_from "$RB_OUT")"
+  wait_until 10 has_control_client "$sock" || { fail "mirror did not attach"; return; }
+  mv "$sock" "$dir/s.moved"
+  track_server "$dir/s.moved"
+  sudo -n -u nobody "$TMUX_BIN" -S "$sock" -f /dev/null new-session -d -s theirs 2>/dev/null
+  sudo -n chmod 777 "$sock" 2>/dev/null
+  if [ ! -S "$sock" ]; then skip "could not start the other user's server"; return; fi
+  local c; c="$(t "$dir/s.moved" list-clients -F '#{client_control_mode}:#{client_name}' | awk -F: '$1==1{print $2; exit}')"
+  t "$dir/s.moved" detach-client -t "$c"
+  sleep 8
+  [ "$(sudo -n -u nobody "$TMUX_BIN" -S "$sock" list-clients 2>/dev/null | grep -c .)" -eq 0 ] \
+    && pass "the reconnect never reached the other user's server" \
+    || fail "after the socket changed hands, the app's reconnect attached to another user's server"
+  local n; n="$(tmux_descendant_count "$(app_pid)")"
+  wait_until 10 no_tmux_children \
+    && pass "no reconnect loop against the foreign socket" \
+    || fail "the app keeps $n tmux processes going against the foreign socket (reconnect loop?)"
+  info "events: $(state_json "$sock" main | head -c 400)"
+  sudo -n -u nobody "$TMUX_BIN" -S "$sock" kill-server 2>/dev/null
+  local w; for w in $ids; do close_workspace "$w"; done
+  assert_app_healthy
+}
+
+# ---- A17: no pty left ----------------------------------------------------------------
+# A helper holds every free pty, so openpty fails inside the app. The attach
+# must fail with a clear message, the app must not crash, and once the ptys
+# are released its descriptor count must be where it was and a mirror must work.
+attack_A17() {
+  require_feature || return
+  command -v python3 >/dev/null || { skip "python3 is not available to hold ptys"; return; }
+  local sock pid base ready="$ADV_TMP_ROOT/a17.ready" release="$ADV_TMP_ROOT/a17.release"
+  sock="$(new_server a17)"
+  pid="$(app_pid)"
+  base="$(fd_count "$pid")"
+  rm -f "$ready" "$release"
+  python3 -I -c '
+import os, resource, sys, time
+soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+target = hard if hard != resource.RLIM_INFINITY else 65536
+try:
+    resource.setrlimit(resource.RLIMIT_NOFILE, (min(target, 65536), hard))
+except Exception:
+    pass
+held = []
+reason = "no error"
+while True:
+    try:
+        held.append(os.openpty())
+    except OSError as error:
+        reason = str(error)
+        break
+open(sys.argv[1], "w").write("%d ptys held; next openpty: %s\n" % (len(held), reason))
+deadline = time.time() + 90
+while not os.path.exists(sys.argv[2]) and time.time() < deadline:
+    time.sleep(0.1)
+' "$ready" "$release" &
+  local hpid=$!
+  if ! wait_until 30 test -s "$ready"; then
+    kill "$hpid" 2>/dev/null; fail "the pty holder never reported"; return
+  fi
+  info "pty holder: $(cat "$ready")"
+  run_bounded 40 mirror_rpc "$sock"
+  printf 'rpc(%s): %s\n' "$RB_STATUS" "$RB_OUT" > "$ARTIFACTS/A17.txt"
+  touch "$release"; wait "$hpid"
+  app_alive && pass "the app survived having no pty" || { fail "the app crashed when no pty was available"; return; }
+  [ "$RB_STATUS" -ne 124 ] && rpc_refused && pass "the attach failed with a message: $(printf '%s' "$RB_OUT" | head -c 200)" \
+    || fail "with no pty the attach did not fail cleanly (status $RB_STATUS): $RB_OUT"
+  wait_until 10 fds_at_most "$pid" "$base" \
+    && pass "descriptors back at the baseline after the failed attach ($(fd_count "$pid") <= $base)" \
+    || fail "descriptors grew from $base to $(fd_count "$pid") after the failed attach"
+  local w; for w in $(workspace_ids_from "$RB_OUT"); do close_workspace "$w"; done
+  t "$sock" kill-server 2>/dev/null
+  assert_app_healthy
+}
+
+# ---- A18: 30 detaches from the server side ------------------------------------------
+# The leak check closes workspaces; this ends the stream from tmux's side
+# (`detach-client`), which takes the reconnect path and a fresh pty each time.
+attack_A18() {
+  require_feature || return
+  local sock pid base i c ids=""
+  sock="$(new_server a18)"
+  pid="$(app_pid)"
+  run_bounded 30 mirror_rpc "$sock"; ids="$ids $(workspace_ids_from "$RB_OUT")"
+  wait_until 10 has_control_client "$sock" || { fail "mirror did not attach"; return; }
+  c="$(t "$sock" list-clients -F '#{client_control_mode}:#{client_name}' | awk -F: '$1==1{print $2; exit}')"
+  t "$sock" detach-client -t "$c"; wait_until 10 no_control_clients "$sock"; sleep 2
+  base="$(fd_count "$pid")"
+  lsof -p "$pid" > "$ARTIFACTS/A18-lsof-baseline.txt" 2>/dev/null
+  for i in $(seq 1 30); do
+    if ! has_control_client "$sock"; then
+      wait_until 5 has_control_client "$sock" || { run_bounded 30 mirror_rpc "$sock"; ids="$ids $(workspace_ids_from "$RB_OUT")"; }
+    fi
+    wait_until 10 has_control_client "$sock" || continue
+    c="$(t "$sock" list-clients -F '#{client_control_mode}:#{client_name}' | awk -F: '$1==1{print $2; exit}')"
+    t "$sock" detach-client -t "$c" 2>/dev/null
+    wait_until 10 no_control_clients "$sock"
+  done
+  sleep 3
+  lsof -p "$pid" > "$ARTIFACTS/A18-lsof-after.txt" 2>/dev/null
+  local after; after="$(fd_count "$pid")"
+  [ "$after" -le "$base" ] && pass "descriptors back at baseline after 30 server-side detaches ($after <= $base)" \
+    || fail "descriptors grew from $base to $after over 30 server-side detaches (see A18-lsof-*.txt)"
+  [ "$(zombie_children "$pid")" -eq 0 ] && pass "no zombie children" || fail "$(zombie_children "$pid") zombie children"
+  local w; for w in $ids; do close_workspace "$w"; done
+  t "$sock" kill-server 2>/dev/null
+}
+
+# ---- A19: the control client is stopped --------------------------------------------
+# A stopped client reads nothing, so the pty fills and the app's stdin writer
+# waits in poll. Continuing it must resume the mirror; detaching it while
+# stopped must still end it (SIGTERM stays pending on a stopped process).
+attack_A19() {
+  require_feature || return
+  local sock cpid i
+  sock="$(new_server a19)"
+  run_bounded 30 mirror_rpc "$sock"
+  local ids; ids="$(workspace_ids_from "$RB_OUT")"
+  wait_until 10 has_control_client "$sock" || { fail "mirror did not attach"; return; }
+  cpid="$(control_client_pid "$sock")"
+  [ -n "$cpid" ] || { fail "could not find cmux's control client"; return; }
+  kill -STOP "$cpid"
+  # Make the app write: every new window makes it send several commands.
+  for i in $(seq 1 40); do t "$sock" new-window -t main >/dev/null 2>&1; done
+  sleep 2
+  app_responds && pass "the app answers while its control client is stopped" \
+    || fail "the app stopped answering while its control client was stopped"
+  kill -CONT "$cpid"
+  wait_until 20 window_count_is "$sock" 41 && pass "after SIGCONT the mirror caught up (41 windows)" \
+    || fail "after SIGCONT the mirror shows $(mirror_window_count "$sock") windows, not 41"
+  cpid="$(control_client_pid "$sock")"
+  kill -STOP "$cpid"
+  local w; for w in $ids; do close_workspace "$w"; done
+  wait_until 15 bash -c "! kill -0 $cpid 2>/dev/null" && pass "a stopped client is still ended by the detach" \
+    || { fail "the stopped client $cpid is still alive 15 s after the detach"; kill -CONT "$cpid" 2>/dev/null; }
+  wait_until 5 no_control_clients "$sock" && pass "no control client left" || fail "a control client is left attached"
+  t "$sock" kill-server 2>/dev/null
+  assert_app_healthy
+}
+
+# ---- A20: odd socket locations from the CLI ------------------------------------------
+# A relative --socket-path from a deleted working directory, a relative
+# TMUX_TMPDIR, and a TMUX_TMPDIR too long for a Unix socket path. Each must
+# end with a clear message and a normal exit; none may mirror some other server.
+attack_A20() {
+  require_feature || return
+  local gone="$ADV_TMP_ROOT/a20gone" out
+  mkdir -p "$gone"
+  run_bounded 30 bash -c "cd '$gone' && rmdir '$gone' && exec '$(cli_path)' tmux-mirror --socket-path rel/s --no-focus"
+  out="$RB_OUT"; printf 'deleted-cwd(%s): %s\n' "$RB_STATUS" "$out" > "$ARTIFACTS/A20.txt"
+  ended_cleanly && [ "$RB_STATUS" -ne 0 ] && pass "relative socket path from a deleted directory: refused ($(printf '%s' "$out" | head -1))" \
+    || fail "relative socket path from a deleted directory: status $RB_STATUS: $out"
+  local rel="$ADV_TMP_ROOT/a20rel"; mkdir -p "$rel"
+  run_bounded 30 bash -c "cd '$rel' && TMUX_TMPDIR=relative-tmp exec '$(cli_path)' tmux-mirror --no-focus"
+  out="$RB_OUT"; printf 'relative-tmpdir(%s): %s\n' "$RB_STATUS" "$out" >> "$ARTIFACTS/A20.txt"
+  ended_cleanly && pass "relative TMUX_TMPDIR: ended normally (status $RB_STATUS)" || fail "relative TMUX_TMPDIR: status $RB_STATUS"
+  if [ "$RB_STATUS" -eq 0 ]; then
+    info "relative TMUX_TMPDIR was accepted; the server it made is under $rel/relative-tmp"
+    "$TMUX_BIN" -S "$rel/relative-tmp/tmux-$(id -u)/default" kill-server 2>/dev/null
+  fi
+  local long="$ADV_TMP_ROOT/$(printf 'L%.0s' $(seq 1 120))"
+  mkdir -p "$long"
+  run_bounded 30 env TMUX_TMPDIR="$long" "$(cli_path)" tmux-mirror --no-focus
+  out="$RB_OUT"; printf 'long-tmpdir(%s): %s\n' "$RB_STATUS" "$out" >> "$ARTIFACTS/A20.txt"
+  ended_cleanly && [ "$RB_STATUS" -ne 0 ] && ! mentions_ssh "$out" && pass "over-long socket path: refused ($(printf '%s' "$out" | head -1))" \
+    || fail "over-long socket path: status $RB_STATUS: $out"
+}
+
+# ---- A21: a tmux wrapper whose child keeps stderr open ------------------------------
+# Some tmux wrappers start a helper in the background. The helper inherits
+# stderr, so a reader that waits for stderr to close keeps waiting after tmux
+# itself has exited.
+attack_A21() {
+  require_feature || return
+  local sock; sock="$(new_server a21)"
+  local wrapper; wrapper="$(make_fake stderrheld <<EOF
+sleep 300 &
+echo \$! >> "$FAKES/stderrheld.pids"
+exec "$REAL_TMUX" "\$@"
+EOF
+)"
+  : > "$FAKES/stderrheld.pids"
+  run_bounded 60 env PATH="$wrapper:/usr/bin:/bin" "$(cli_path)" tmux-mirror --socket-path "$sock" --no-focus
+  printf 'wrapper(%s after %ss): %s\n' "$RB_STATUS" "$RB_ELAPSED" "$RB_OUT" > "$ARTIFACTS/A21.txt"
+  [ "$RB_STATUS" -ne 124 ] && pass "the CLI returned after ${RB_ELAPSED}s although a child held tmux's stderr" \
+    || fail "the CLI waited 60 s for stderr to close after tmux had exited (it reads stderr to end-of-file)"
+  local p; for p in $(cat "$FAKES/stderrheld.pids"); do kill "$p" 2>/dev/null; done
+  t "$sock" kill-server 2>/dev/null
 }
 
 # ---- run -------------------------------------------------------------------------
