@@ -22,8 +22,16 @@ actor RemoteTmuxSSHTransport {
     /// `Sendable` value) when tearing down masters on quit/window-close.
     nonisolated let host: RemoteTmuxHost
 
+    /// How this host's one-shots are carried, and whether it has a shared master at all.
+    ///
+    /// `nonisolated` for the same reason as ``host``: an immutable `Sendable` value.
+    nonisolated let transportProfile: RemoteTmuxTransportProfile
+
+    /// The `ssh` that answers `-O check` and `-O exit` against the shared master.
     private let sshExecutablePath: String
-    private let controlPersistSeconds: Int
+
+    /// The binary that runs one-shot commands with the profile's argv.
+    private let oneShotExecutablePath: String
 
     /// In-flight shared-master warmup, if any. ``ensureMasterReady()`` funnels every
     /// concurrent caller through this single task so the master is opened at most
@@ -32,16 +40,20 @@ actor RemoteTmuxSSHTransport {
 
     /// - Parameters:
     ///   - host: the remote destination.
-    ///   - sshExecutablePath: the local `ssh` binary (overridable for tests).
-    ///   - controlPersistSeconds: idle lifetime of the shared master.
+    ///   - sshExecutablePath: replaces the `ssh` binary for one-shots and master control
+    ///     (tests inject a fake). `nil` uses the profile's one-shot binary.
+    ///   - transportProfile: overrides the host's profile (tests use it to exercise the seam
+    ///     without a real transport). `nil` uses ``RemoteTmuxHost/transportProfile``.
     init(
         host: RemoteTmuxHost,
-        sshExecutablePath: String = RemoteTmuxHost.defaultSSHExecutablePath(),
-        controlPersistSeconds: Int = 180
+        sshExecutablePath: String? = nil,
+        transportProfile: RemoteTmuxTransportProfile? = nil
     ) {
+        let profile = transportProfile ?? host.transportProfile
         self.host = host
-        self.sshExecutablePath = sshExecutablePath
-        self.controlPersistSeconds = controlPersistSeconds
+        self.transportProfile = profile
+        self.sshExecutablePath = sshExecutablePath ?? RemoteTmuxHost.defaultSSHExecutablePath()
+        self.oneShotExecutablePath = sshExecutablePath ?? profile.oneShotExecutablePath()
     }
 
     // MARK: - High-level tmux operations
@@ -153,17 +165,24 @@ actor RemoteTmuxSSHTransport {
         try await run(["tmux"] + args)
     }
 
-    /// Runs an arbitrary remote command over the shared SSH master.
+    /// Runs an arbitrary remote command the way the host's transport profile says.
     ///
-    /// `ssh` concatenates the post-destination argv with spaces and the remote
-    /// login shell re-splits the result, so each remote token is single-quoted
-    /// here; otherwise whitespace inside an argument (e.g. the tabs in a
-    /// `list-sessions -F` format string) would be word-split on the remote.
-    /// A leading literal `tmux` is the `runTmux(_:)` contract and selects the
-    /// remote tmux resolver; other commands are treated as explicit remote argv.
+    /// The remote command is one shell string. `ssh` concatenates the
+    /// post-destination argv with spaces and the remote login shell re-splits
+    /// the result, so each remote token is single-quoted here; otherwise
+    /// whitespace inside an argument (e.g. the tabs in a `list-sessions -F`
+    /// format string) would be word-split on the remote. A leading literal
+    /// `tmux` is the `runTmux(_:)` contract and selects the tmux resolver;
+    /// other commands are treated as explicit remote argv.
+    ///
+    /// The profile supplies the executable and argv
+    /// (``RemoteTmuxTransportProfile/oneShotArgv(host:remoteCommand:)``), so the
+    /// transport never builds an ssh command line itself.
     @discardableResult
     func run(_ remoteArgs: [String]) async throws -> RemoteTmuxCommandResult {
-        try host.ensureControlSocketDirectory()
+        if transportProfile.usesSharedControlMaster {
+            try host.ensureControlSocketDirectory()
+        }
         let remoteCommand: String
         if remoteArgs.first == "tmux" {
             remoteCommand = RemoteTmuxHost.tmuxRemoteCommand(arguments: Array(remoteArgs.dropFirst()))
@@ -172,12 +191,10 @@ actor RemoteTmuxSSHTransport {
                 .map { RemoteTmuxHost.shellSingleQuoted($0) }
                 .joined(separator: " ")
         }
-        // `--` ends ssh option parsing so a destination beginning with `-`
-        // (e.g. `-oProxyCommand=…`) can never be consumed as an ssh option.
-        let sshArgs =
-            host.sshControlArguments(controlPersistSeconds: controlPersistSeconds, batchMode: true)
-            + ["--", host.destination, remoteCommand]
-        return try await Self.runProcess(executable: sshExecutablePath, arguments: sshArgs)
+        return try await Self.runProcess(
+            executable: oneShotExecutablePath,
+            arguments: transportProfile.oneShotArgv(host: host, remoteCommand: remoteCommand)
+        )
     }
 
     /// Opens the shared SSH ControlMaster (if it isn't already up) and confirms it
@@ -214,8 +231,12 @@ actor RemoteTmuxSSHTransport {
     /// rather than tearing it down for the others. Callers that must bail re-check
     /// `Task.checkCancellation()` after this — as the controller does before
     /// creating the dedicated window.
+    ///
+    /// A transport whose profile has no shared master is always ready: there is
+    /// nothing to warm, and no socket whose absence would mean "not yet".
     @discardableResult
     func ensureMasterReady() async throws -> Bool {
+        guard transportProfile.usesSharedControlMaster else { return true }
         if let existing = readinessTask {
             return try await existing.value
         }
@@ -266,12 +287,18 @@ actor RemoteTmuxSSHTransport {
     /// probe for "has the user finished authenticating in the login terminal yet?" —
     /// unlike ``ensureMasterReady()``, which would attempt a `BatchMode` open and
     /// burn a failed authentication attempt while the user is still typing.
+    ///
+    /// A transport with no shared master reports live, matching
+    /// ``ensureMasterReady()``: nothing is pending on a socket.
     func isMasterLive() async -> Bool {
-        (try? await masterIsRunning()) ?? false
+        guard transportProfile.usesSharedControlMaster else { return true }
+        return (try? await masterIsRunning()) ?? false
     }
 
     /// Tears down the shared SSH master (e.g. when the user removes a host).
+    /// Does nothing for a transport with no shared master.
     func shutdownMaster() async {
+        guard transportProfile.usesSharedControlMaster else { return }
         _ = try? await Self.runProcess(
             executable: sshExecutablePath,
             arguments: ["-O", "exit", "-o", "ControlPath=\(host.controlSocketPath)", "--", host.destination]
@@ -286,10 +313,12 @@ actor RemoteTmuxSSHTransport {
     /// runs independently of cmux, so the master is torn down even as the app exits
     /// — instead of lingering for `ControlPersist` after the user closes the app or
     /// the mirror window. Best-effort: a missing/dead socket just fails fast.
+    /// Spawns nothing for a host whose transport has no shared master.
     nonisolated static func spawnControlMasterExit(
         host: RemoteTmuxHost,
         sshExecutablePath: String = RemoteTmuxHost.defaultSSHExecutablePath()
     ) {
+        guard host.transportProfile.usesSharedControlMaster else { return }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: sshExecutablePath)
         process.arguments = ["-O", "exit", "-o", "ControlPath=\(host.controlSocketPath)", "--", host.destination]

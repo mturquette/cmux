@@ -160,6 +160,21 @@ protocol RemoteTmuxTransportProfile: Sendable {
     /// argv for a one-shot remote command (discovery, mutations).
     func oneShotArgv(host: RemoteTmuxHost, remoteCommand: String) -> [String]
 
+    /// The binary that runs one-shot commands, given ``oneShotArgv(host:remoteCommand:)``.
+    ///
+    /// Separate from ``executablePath()`` because the two can differ: et carries its control stream
+    /// itself but sends discovery and mutations over ssh. Defaults to ssh, so a profile that does
+    /// not override it keeps today's one-shot path.
+    func oneShotExecutablePath() -> String
+
+    /// Whether this transport's one-shots ride the host's shared ssh ControlMaster.
+    ///
+    /// When true, ``RemoteTmuxSSHTransport`` creates the control-socket directory, warms the master
+    /// before an attach burst, and closes it on teardown. A transport that never connects through
+    /// ssh has no master, so those steps are skipped rather than run against a socket that will
+    /// never exist. Defaults to true, which is what ssh and et need.
+    var usesSharedControlMaster: Bool { get }
+
     /// Whether the transport needs a pseudo-terminal rather than pipes.
     ///
     /// This used to say that `et` writes nothing at all on pipes, so a pty was the difference
@@ -249,6 +264,12 @@ extension RemoteTmuxTransportProfile {
 
     /// cmux's own ssh invocation is the default shape.
     var authenticationIsSSHShaped: Bool { true }
+
+    /// One-shots go over ssh unless a profile says otherwise.
+    func oneShotExecutablePath() -> String { RemoteTmuxHost.defaultSSHExecutablePath() }
+
+    /// ssh and et both send one-shots through the shared master.
+    var usesSharedControlMaster: Bool { true }
 }
 
 /// What end-of-stream on the control connection means.

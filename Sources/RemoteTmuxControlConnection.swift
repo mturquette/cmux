@@ -618,7 +618,9 @@ final class RemoteTmuxControlConnection {
     /// Spawns the SSH `tmux -CC` process and begins streaming.
     func start() throws {
         guard !started else { return }
-        try host.ensureControlSocketDirectory()
+        if transportProfile.usesSharedControlMaster {
+            try host.ensureControlSocketDirectory()
+        }
         // The initial connect honors the caller's mode; reconnects never create.
         try spawnProcess(mode: attachMode)
         started = true
