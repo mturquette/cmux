@@ -304,16 +304,16 @@ attack_A1() {
   for w in $ids; do wait_until 3 workspace_gone "$w" || all_gone=0; done
   [ "$all_gone" = 1 ] && pass "mirror workspaces ended within about 2 s of the server dying ($(( $(date +%s) - start )) s)" \
     || fail "mirror workspaces still exist 3 s after kill-server (R19)"
-  # No respawn loop: from 2 s to 8 s after the death, the app should have no
-  # tmux or script child at any sample (the first 2 s are teardown).
-  local pid max=0 n i=0
-  pid="$(app_pid)"
+  # No respawn loop: from 2 s to 8 s after the death, no process of the app
+  # may name this server's socket at any sample (the first 2 s are
+  # teardown). Mirrors of other servers do not count.
+  local max=0 n i=0
   while [ "$i" -lt 40 ]; do
-    if [ "$i" -ge 10 ]; then n="$(tmux_descendant_count "$pid")"; [ "$n" -gt "$max" ] && max="$n"; fi
+    if [ "$i" -ge 10 ]; then n="$(app_procs_for_socket "$sock" | grep -c .)"; [ "$n" -gt "$max" ] && max="$n"; fi
     sleep 0.2; i=$((i + 1))
   done
-  [ "$max" -eq 0 ] && pass "no tmux process was running 2 to 8 s after the server died" \
-    || fail "the app kept $max tmux or script children alive after the server died (respawn loop?)"
+  [ "$max" -eq 0 ] && pass "no process for this server was running 2 to 8 s after it died" \
+    || fail "the app kept up to $max processes for the dead server alive (respawn loop?)"
   # Re-running after a restart works (R19).
   "$TMUX_BIN" -S "$sock" -f /dev/null new-session -d -s main
   run_bounded 30 mirror_rpc "$sock"
@@ -900,6 +900,13 @@ EOF
   local dir="$ADV_TMP_ROOT/a13"; mkdir -p "$dir"; chmod 700 "$dir"
   local sock="$dir/s" start="$ADV_TMP_ROOT/a13start"; mkdir -p "$start"
   track_server "$sock"
+  # What the CLI's child will see: the resolver runs `/bin/sh` and starts with
+  # `command -v tmux`, using the environment the CLI passes on.
+  {
+    echo "fake: $pause/tmux"; ls -l "$pause/tmux"; echo "--- fake body:"; cat "$pause/tmux"; echo "---"
+    echo "as /bin/sh sees it with the CLI's PATH:"
+    env PATH="$pause:/usr/bin:/bin" /bin/sh -c 'echo "PATH=$PATH"; echo "command -v tmux: $(command -v tmux)"'
+  } > "$ARTIFACTS/A13-resolver-view.txt" 2>&1
   # Race 1: another shell starts the server between the check and new-session.
   rm -f "$gate/paused" "$gate/go"
   ( cd "$start" && PATH="$pause:/usr/bin:/bin" "$ADV_REPO_ROOT/scripts/cmux-debug-cli.sh" tmux-mirror --socket-path "$sock" --no-focus > "$ADV_TMP_ROOT/a13.out" 2>&1; echo $? > "$ADV_TMP_ROOT/a13.rc" ) &
@@ -917,7 +924,7 @@ EOF
     info "control clients per session: $(t "$sock" list-clients -F '#{client_control_mode} #{session_name}' | tr '\n' ';')"
   else
     touch "$gate/go"; wait "$cpid"
-    fail "the CLI never paused in a failing list-sessions; status $(cat "$ADV_TMP_ROOT/a13.rc" 2>/dev/null), output: $(head -c 300 "$ADV_TMP_ROOT/a13.out"); fake saw: $(tr '\n' ';' < "$argv_log" | head -c 600)"
+    fail "the CLI never paused in a failing list-sessions; status $(cat "$ADV_TMP_ROOT/a13.rc" 2>/dev/null), output: $(head -c 300 "$ADV_TMP_ROOT/a13.out"); fake saw: $(tr '\n' ';' < "$argv_log" | head -c 600); resolver view: $(grep -E '^(PATH=|command -v)' "$ARTIFACTS/A13-resolver-view.txt" | tr '\n' ';')"
   fi
   cp "$argv_log" "$ARTIFACTS/A13-argv-race1.log" 2>/dev/null; : > "$argv_log"
   t "$sock" kill-server 2>/dev/null
@@ -995,6 +1002,16 @@ ended_cleanly() { [ "$RB_STATUS" -ne 124 ] && [ "$RB_STATUS" -lt 128 ]; }
 # Predicates for wait_until, which re-runs them on every poll.
 no_tmux_children() { [ "$(tmux_descendant_count "$(app_pid)")" -eq 0 ]; }
 fds_at_most() { [ "$(fd_count "$1")" -le "$2" ]; }
+# The app's descendants whose command line names one socket, as
+# `pid ppid stat etime command` lines. Mirrors of other servers left by
+# earlier attacks do not count.
+app_procs_for_socket() {
+  local p
+  for p in $(descendants "$(app_pid)"); do
+    ps -o pid=,ppid=,stat=,etime=,command= -p "$p" 2>/dev/null | grep -F -- "$1"
+  done
+}
+no_app_procs_for_socket() { [ -z "$(app_procs_for_socket "$1")" ]; }
 
 # ---- A15: a frozen server ----------------------------------------------------------
 # The server's socket accepts connections (the kernel queues them) but nothing
@@ -1016,9 +1033,12 @@ attack_A15() {
   printf 'rpc(%s after %ss): %s\n' "$RB_STATUS" "$RB_ELAPSED" "$RB_OUT" >> "$ARTIFACTS/A15.txt"
   [ "$RB_STATUS" -ne 124 ] && pass "the app's attach to a frozen server ended after ${RB_ELAPSED}s" \
     || fail "the app's attach to a frozen server was still waiting after 90 s"
-  wait_until 15 no_tmux_children \
-    && pass "no tmux process is left waiting on the frozen server" \
-    || fail "$(tmux_descendant_count "$(app_pid)") tmux processes still wait on the frozen server"
+  if wait_until 15 no_app_procs_for_socket "$sock"; then
+    pass "no process of the app is left waiting on the frozen server"
+  else
+    app_procs_for_socket "$sock" > "$ARTIFACTS/A15-left.txt"
+    fail "$(grep -c . < "$ARTIFACTS/A15-left.txt") processes of the app still name the frozen server's socket: $(tr '\n' ';' < "$ARTIFACTS/A15-left.txt")"
+  fi
   kill -CONT "$pid"
   t "$sock" kill-server 2>/dev/null
   assert_app_healthy
@@ -1053,10 +1073,11 @@ attack_A16() {
   [ "$(sudo -n -u nobody "$TMUX_BIN" -S "$sock" list-clients 2>/dev/null | grep -c .)" -eq 0 ] \
     && pass "the reconnect never reached the other user's server" \
     || fail "after the socket changed hands, the app's reconnect attached to another user's server"
-  local n; n="$(tmux_descendant_count "$(app_pid)")"
-  wait_until 10 no_tmux_children \
-    && pass "no reconnect loop against the foreign socket" \
-    || fail "the app keeps $n tmux processes going against the foreign socket (reconnect loop?)"
+  if wait_until 10 no_app_procs_for_socket "$sock"; then
+    pass "no reconnect loop against the foreign socket"
+  else
+    fail "the app keeps processes going against the foreign socket (reconnect loop?): $(app_procs_for_socket "$sock" | tr '\n' ';')"
+  fi
   info "events: $(state_json "$sock" main | head -c 400)"
   sudo -n -u nobody "$TMUX_BIN" -S "$sock" kill-server 2>/dev/null
   local w; for w in $ids; do close_workspace "$w"; done
