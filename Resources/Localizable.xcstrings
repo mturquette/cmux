@@ -645258,6 +645258,62 @@
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "%@ 的伺服器上沒有 tmux 工作階段。" } }
       }
     },
+    "remoteTmux.local.mirrorEnded.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "tmux session ended" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "انتهت جلسة tmux" } },
+        "de": { "stringUnit": { "state": "translated", "value": "tmux-Sitzung beendet" } },
+        "es": { "stringUnit": { "state": "translated", "value": "La sesión de tmux terminó" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Session tmux terminée" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "tmux セッションが終了しました" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "tmux 세션이 종료됨" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "tmux 会话已结束" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "tmux 工作階段已結束" } }
+      }
+    },
+    "remoteTmux.local.mirrorEnded.body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "The session or its tmux server ended, so its mirror workspace was closed." } },
+        "ar": { "stringUnit": { "state": "translated", "value": "انتهت الجلسة أو خادم tmux الخاص بها، لذلك أُغلقت مساحة العمل المعكوسة." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Die Sitzung oder ihr tmux-Server wurde beendet, daher wurde ihr Spiegel-Workspace geschlossen." } },
+        "es": { "stringUnit": { "state": "translated", "value": "La sesión o su servidor tmux terminó, así que se cerró su espacio de trabajo reflejado." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "La session ou son serveur tmux s’est arrêté, son espace de travail miroir a donc été fermé." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "セッションまたはその tmux サーバーが終了したため、ミラーのワークスペースを閉じました。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "세션 또는 tmux 서버가 종료되어 미러 워크스페이스를 닫았습니다." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "会话或其 tmux 服务器已结束，因此其镜像工作区已关闭。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "工作階段或其 tmux 伺服器已結束，因此其鏡像工作區已關閉。" } }
+      }
+    },
+    "remoteTmux.error.localServerNotRunning": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "no tmux server is running at %@; run cmux tmux-mirror from a shell to start one" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "لا يعمل أي خادم tmux عند %@؛ شغّل cmux tmux-mirror من صدفة لبدء خادم" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Unter %@ läuft kein tmux-Server; führe cmux tmux-mirror in einer Shell aus, um einen zu starten" } },
+        "es": { "stringUnit": { "state": "translated", "value": "no hay ningún servidor tmux en ejecución en %@; ejecuta cmux tmux-mirror desde una shell para iniciar uno" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "aucun serveur tmux ne tourne à %@ ; lancez cmux tmux-mirror depuis un shell pour en démarrer un" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@ で tmux サーバーが動いていません。シェルから cmux tmux-mirror を実行して起動してください" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "%@에서 실행 중인 tmux 서버가 없습니다. 셸에서 cmux tmux-mirror를 실행해 서버를 시작하세요" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "%@ 处没有正在运行的 tmux 服务器；请在 shell 中运行 cmux tmux-mirror 来启动一个" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "%@ 沒有正在執行的 tmux 伺服器；請在 shell 中執行 cmux tmux-mirror 來啟動一個" } }
+      }
+    },
+    "cli.tmuxMirror.error.tmuxTimedOut": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "tmux-mirror: tmux did not answer in time; the server may be frozen" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "tmux-mirror: لم يستجب tmux في الوقت المحدد؛ ربما توقف الخادم عن الاستجابة" } },
+        "de": { "stringUnit": { "state": "translated", "value": "tmux-mirror: tmux hat nicht rechtzeitig geantwortet; der Server hängt möglicherweise" } },
+        "es": { "stringUnit": { "state": "translated", "value": "tmux-mirror: tmux no respondió a tiempo; puede que el servidor esté bloqueado" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "tmux-mirror : tmux n’a pas répondu à temps ; le serveur est peut-être figé" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "tmux-mirror: tmux が時間内に応答しませんでした。サーバーが固まっている可能性があります" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "tmux-mirror: tmux가 제시간에 응답하지 않았습니다. 서버가 멈췄을 수 있습니다" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "tmux-mirror：tmux 没有及时响应；服务器可能已卡住" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "tmux-mirror：tmux 沒有及時回應；伺服器可能已卡住" } }
+      }
+    },
     "remoteTmux.error.localTmuxNotFound": {
       "extractionState": "manual",
       "localizations": {

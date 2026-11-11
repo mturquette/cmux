@@ -207,6 +207,25 @@ protocol RemoteTmuxTransportProfile: Sendable {
     /// none. Defaults to none.
     func appCreatedSessionArguments() -> [String]
 
+    /// The error a whole-server mirror raises when the server has no sessions, or nil to start one.
+    ///
+    /// ssh and et start a session on an empty remote server, as they always have (nil). The local
+    /// transport refuses instead: the CLI starts the first session from the user's shell, with its
+    /// environment and working directory, and a session the app started would get neither.
+    func emptyServerRefusal(host: RemoteTmuxHost) -> RemoteTmuxError?
+
+    /// Why spawning a process for `host` must not happen now, or nil to go ahead.
+    ///
+    /// Checked before every control-stream spawn, reconnects included, and before every
+    /// one-shot, so a check made once at the socket boundary cannot go stale. Defaults to nil.
+    func refusalBeforeSpawn(host: RemoteTmuxHost) -> RemoteTmuxError?
+
+    /// Whether closing a mirror workspace because its session ended also posts a notification.
+    ///
+    /// Defaults to false, which keeps ssh and et as they are. The local transport says so, because
+    /// R19 requires that a mirror whose server dies ends with a message.
+    var announcesEndedMirror: Bool { get }
+
     /// The error for "no tmux binary was found", worded for where this transport looks.
     func tmuxNotFoundError(host: RemoteTmuxHost) -> RemoteTmuxError
 
@@ -329,6 +348,13 @@ extension RemoteTmuxTransportProfile {
     func unsupportedTmuxError(detected: String) -> RemoteTmuxError {
         .unsupportedTmux(detected: detected)
     }
+
+    /// A remote server with no sessions gets one, as before.
+    func emptyServerRefusal(host: RemoteTmuxHost) -> RemoteTmuxError? { nil }
+
+    func refusalBeforeSpawn(host: RemoteTmuxHost) -> RemoteTmuxError? { nil }
+
+    var announcesEndedMirror: Bool { false }
 }
 
 /// What end-of-stream on the control connection means.
