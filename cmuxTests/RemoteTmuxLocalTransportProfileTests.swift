@@ -339,6 +339,29 @@ import Testing
         #expect(result.failure == .notOwnedByUser(path: socket.canonicalPath))
     }
 
+    /// Another local user who can write to the socket's directory can rename their own server's
+    /// socket into place between the check and tmux's connect, and the mirror would then type
+    /// into their shell. Only the user's own directory, or a root-owned sticky one, is safe.
+    @Test func boundaryRefusesASocketInADirectoryOthersCanWrite() throws {
+        let socket = try TemporarySocket()
+        defer { socket.cleanUp() }
+        try #require(chmod(socket.directory, 0o777) == 0)
+
+        let result = TerminalController.remoteTmuxLocalHostResult(
+            from: ["transport": "local", "socket_path": socket.path]
+        )
+        #expect(result.failure != nil, "a socket in a world-writable, non-sticky directory must be refused")
+        #expect(TerminalController.remoteTmuxHost(from: ["transport": "local", "socket_path": socket.path]) == nil)
+    }
+
+    /// Failures for a local mirror name this Mac, not a remote host called "local".
+    @Test func localWordingNeverNamesARemoteHost() {
+        let host = RemoteTmuxHost.local(serverSocketPath: "/tmp/cmux-lt-absent/default")
+        #expect(host.destination != "local")
+        let unknown = TerminalController.remoteTmuxBrokerFailureMessage(from: ["transport": "bogus"]) ?? ""
+        #expect(unknown.contains("local"), "the unknown-transport message lists local among the choices")
+    }
+
     @Test func boundaryRefusesASymlinkToSomethingThatIsNotASocket() throws {
         let socket = try TemporarySocket()
         defer { socket.cleanUp() }
