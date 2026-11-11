@@ -978,6 +978,26 @@ final class RemoteTmuxController {
         workspaceId: UUID,
         reason: RemoteTmuxMirrorTeardownReason
     ) {
+        // R19: a local mirror whose session or server ended says so, on every teardown path
+        // below (multiplexed, kept open, or closed). The window is looked up first, while the
+        // dying workspace still names it.
+        let announcingManager = reason == .sessionEnded && host.transportProfile.announcesEndedMirror
+            ? AppDelegate.shared?.tabManagerFor(tabId: workspaceId) : nil
+        defer {
+            if let announcingManager,
+               let tabId = announcingManager.selectedTabId ?? announcingManager.tabs.first?.id {
+                AppDelegate.shared?.notificationStore?.addNotification(
+                    tabId: tabId,
+                    surfaceId: nil,
+                    title: String(localized: "remoteTmux.local.mirrorEnded.title", defaultValue: "tmux session ended"),
+                    subtitle: sessionName,
+                    body: String(
+                        localized: "remoteTmux.local.mirrorEnded.body",
+                        defaultValue: "The session or its tmux server ended, so its mirror workspace was closed."
+                    )
+                )
+            }
+        }
         let key = Self.connectionKey(host: host, sessionName: sessionName)
         // Multiplexed teardown: release the channel only. The shared stream and
         // ControlMaster belong to the host's view — tearing them down here would
@@ -1031,18 +1051,6 @@ final class RemoteTmuxController {
                     }
                 }
                 manager.closeWorkspace(workspace)
-                if host.transportProfile.announcesEndedMirror, let tabId = manager.selectedTabId {
-                    AppDelegate.shared?.notificationStore?.addNotification(
-                        tabId: tabId,
-                        surfaceId: nil,
-                        title: String(localized: "remoteTmux.local.mirrorEnded.title", defaultValue: "tmux session ended"),
-                        subtitle: sessionName,
-                        body: String(
-                            localized: "remoteTmux.local.mirrorEnded.body",
-                            defaultValue: "The session or its tmux server ended, so its mirror workspace was closed."
-                        )
-                    )
-                }
             case .explicitDetach:
                 // Detach is authoritative even for a pinned final mirror. Closing
                 // its owning window avoids stranding a blank `--new-window` shell.
