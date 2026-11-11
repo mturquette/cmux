@@ -29,7 +29,7 @@ import Testing
     }
 
     /// Each case is refused for one reason only: everything else about it is valid.
-    @Test(arguments: RefusalCase.allCases)
+    @Test(arguments: RemoteTmuxLocalSocketBoundaryTests.RefusalCase.allCases)
     func refuses(_ refusal: RefusalCase) throws {
         let fixture = try SocketFixture()
         defer { fixture.remove() }
@@ -53,7 +53,7 @@ import Testing
         #expect(host == nil)
     }
 
-    @Test(.enabled(if: SocketFixture.foreignSocketPath != nil))
+    @Test(.enabled(if: RemoteTmuxLocalSocketBoundaryTests.SocketFixture.foreignSocketPath != nil))
     func refusesASocketOwnedByAnotherUser() throws {
         let path = try #require(SocketFixture.foreignSocketPath)
         let host = TerminalController.remoteTmuxHost(
