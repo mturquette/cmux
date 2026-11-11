@@ -226,6 +226,15 @@ protocol RemoteTmuxTransportProfile: Sendable {
     /// R19 requires that a mirror whose server dies ends with a message.
     var announcesEndedMirror: Bool { get }
 
+    /// The longest a one-shot command may run, or nil for no limit of cmux's own.
+    ///
+    /// nil for ssh and et, whose ssh options already bound a dead connection. The local
+    /// transport sets one, because a tmux client facing a stopped server never returns.
+    var oneShotDeadline: Duration? { get }
+
+    /// The error a one-shot that missed ``oneShotDeadline`` reports.
+    func oneShotTimeoutError(host: RemoteTmuxHost) -> RemoteTmuxError
+
     /// The error for "no tmux binary was found", worded for where this transport looks.
     func tmuxNotFoundError(host: RemoteTmuxHost) -> RemoteTmuxError
 
@@ -355,6 +364,12 @@ extension RemoteTmuxTransportProfile {
     func refusalBeforeSpawn(host: RemoteTmuxHost) -> RemoteTmuxError? { nil }
 
     var announcesEndedMirror: Bool { false }
+
+    var oneShotDeadline: Duration? { nil }
+
+    func oneShotTimeoutError(host: RemoteTmuxHost) -> RemoteTmuxError {
+        .unreachable(host.destination)
+    }
 }
 
 /// What end-of-stream on the control connection means.

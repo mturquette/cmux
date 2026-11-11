@@ -195,11 +195,47 @@ actor RemoteTmuxSSHTransport {
                 .map { RemoteTmuxHost.shellSingleQuoted($0) }
                 .joined(separator: " ")
         }
-        return try await Self.runProcess(
-            executable: oneShotExecutablePath,
-            arguments: transportProfile.oneShotArgv(host: host, remoteCommand: remoteCommand),
-            environment: transportProfile.oneShotEnvironment(inheriting: ProcessInfo.processInfo.environment)
+        let executable = oneShotExecutablePath
+        let arguments = transportProfile.oneShotArgv(host: host, remoteCommand: remoteCommand)
+        let environment = transportProfile.oneShotEnvironment(inheriting: ProcessInfo.processInfo.environment)
+        guard let deadline = transportProfile.oneShotDeadline else {
+            return try await Self.runProcess(executable: executable, arguments: arguments, environment: environment)
+        }
+        return try await Self.runOneShotBeforeDeadline(
+            executable: executable,
+            arguments: arguments,
+            environment: environment,
+            deadline: deadline,
+            timeoutError: transportProfile.oneShotTimeoutError(host: host)
         )
+    }
+
+    /// Runs a one-shot that must finish before `deadline`.
+    ///
+    /// A deadline, not a poll: the command and a single sleep race, the first to finish wins, and
+    /// cancelling the loser stops the process through `runProcess`'s cancellation handler. It
+    /// exists for transports with no timeout of their own: ssh has `ConnectTimeout` and
+    /// `ServerAlive*`, while a local tmux client facing a stopped server waits forever (A15), and
+    /// the app would keep one such process per call (R17).
+    private static func runOneShotBeforeDeadline(
+        executable: String,
+        arguments: [String],
+        environment: [String: String],
+        deadline: Duration,
+        timeoutError: RemoteTmuxError
+    ) async throws -> RemoteTmuxCommandResult {
+        try await withThrowingTaskGroup(of: RemoteTmuxCommandResult?.self) { group in
+            group.addTask {
+                try await Self.runProcess(executable: executable, arguments: arguments, environment: environment)
+            }
+            group.addTask {
+                try await ContinuousClock().sleep(for: deadline)
+                return nil
+            }
+            defer { group.cancelAll() }
+            guard let first = try await group.next(), let result = first else { throw timeoutError }
+            return result
+        }
     }
 
     /// Opens the shared SSH ControlMaster (if it isn't already up) and confirms it

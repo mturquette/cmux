@@ -645286,6 +645286,20 @@
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "工作階段或其 tmux 伺服器已結束，因此其鏡像工作區已關閉。" } }
       }
     },
+    "remoteTmux.error.localTmuxTimedOut": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "the tmux server at %@ did not answer in time; it may be frozen" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "لم يستجب خادم tmux عند %@ في الوقت المحدد؛ ربما توقف عن الاستجابة" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Der tmux-Server unter %@ hat nicht rechtzeitig geantwortet; er hängt möglicherweise" } },
+        "es": { "stringUnit": { "state": "translated", "value": "el servidor tmux de %@ no respondió a tiempo; puede que esté bloqueado" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "le serveur tmux à %@ n’a pas répondu à temps ; il est peut-être figé" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@ の tmux サーバーが時間内に応答しませんでした。固まっている可能性があります" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "%@의 tmux 서버가 제시간에 응답하지 않았습니다. 멈췄을 수 있습니다" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "%@ 处的 tmux 服务器没有及时响应；它可能已卡住" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "%@ 的 tmux 伺服器沒有及時回應；它可能已卡住" } }
+      }
+    },
     "remoteTmux.error.localServerNotRunning": {
       "extractionState": "manual",
       "localizations": {
