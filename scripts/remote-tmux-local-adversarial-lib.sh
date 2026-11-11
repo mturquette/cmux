@@ -185,24 +185,63 @@ zombie_children() { ps -axo ppid=,stat= 2>/dev/null | awk -v p="$1" '$1 == p && 
 fd_count() { lsof -p "$1" 2>/dev/null | tail -n +2 | grep -c .; }
 rss_kb() { ps -o rss= -p "$1" 2>/dev/null | tr -d ' '; }
 
-app_responds() { run_bounded 10 cli ping >/dev/null 2>&1; }
+# In a subshell, so a liveness check never overwrites a caller's RB_* results.
+app_responds() { ( run_bounded 10 cli ping ) >/dev/null 2>&1; }
 
 enable_betas() {
   defaults write "$APP_BUNDLE_ID" remoteTmux.beta.enabled -bool true
 }
 
+app_executable() {
+  local name
+  name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_PATH/Contents/Info.plist" 2>/dev/null)"
+  [ -n "$name" ] && printf '%s\n' "$APP_PATH/Contents/MacOS/$name"
+}
+
 # Stops the tagged app and starts it again, optionally with extra environment
 # (KEY=VALUE pairs) so a scenario can control what the app inherits.
+#
+# The app is started the way track B's harness and reload.sh start a tagged
+# build: its executable directly, in its own process group, from an `env -i`
+# base that carries the tag's socket settings. `open` would pass none of
+# them, and without CMUX_SOCKET_* the app does not listen on the tagged socket.
 relaunch_app() {
-  local pid; pid="$(app_pid)"
+  local pid exe
+  pid="$(app_pid)"
   if [ -n "$pid" ]; then
     kill -TERM "$pid" 2>/dev/null
     wait_until 15 bash -c "! kill -0 $pid 2>/dev/null" || kill -KILL "$pid" 2>/dev/null
   fi
-  local env_args=() kv
-  for kv in "$@"; do env_args+=(--env "$kv"); done
-  open -g -n "${env_args[@]}" "$APP_PATH" || return 1
-  wait_until 60 test -S "$APP_SOCKET" && wait_until 60 app_responds
+  exe="$(app_executable)"
+  [ -n "$exe" ] && [ -x "$exe" ] || { echo "relaunch_app: no executable under $APP_PATH" >&2; return 1; }
+  local env_args=(
+    "HOME=$HOME" "USER=${USER:-$(id -un)}" "LOGNAME=${USER:-$(id -un)}" "SHELL=${SHELL:-/bin/zsh}"
+    "PATH=$(dirname "$TMUX_BIN"):/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    "TMPDIR=${TMPDIR:-/tmp}"
+    "CMUX_TAG=$TAG_SLUG" "CMUX_BUNDLE_ID=$APP_BUNDLE_ID"
+    "CMUX_SOCKET_ENABLE=1" "CMUX_SOCKET_MODE=allowAll" "CMUX_SOCKET_PATH=$APP_SOCKET"
+    "CMUX_DEBUG_LOG=/tmp/cmux-debug-${TAG_SLUG}.log"
+    "CMUX_BUNDLED_CLI_PATH=$APP_PATH/Contents/Resources/bin/cmux"
+    "CMUX_SHELL_INTEGRATION_DIR=$APP_PATH/Contents/Resources/shell-integration"
+    "CMUXD_UNIX_PATH=$HOME/Library/Application Support/cmux/cmuxd-dev-${TAG_SLUG}.sock"
+    "CMUX_REMOTE_DAEMON_ALLOW_LOCAL_BUILD=1"
+    "CMUX_DEV_BACKEND_MODE=${CMUX_DEV_BACKEND_MODE:-local}"
+  )
+  # Scenario overrides come last, so they win.
+  local kv; for kv in "$@"; do env_args+=("$kv"); done
+  set -m
+  ( exec env -i "${env_args[@]}" "$exe" < /dev/null >> "$ADV_TMP_ROOT/app-launch.log" 2>&1 ) &
+  set +m
+  disown 2>/dev/null
+  wait_until 90 app_responds
+}
+
+# Starts the tagged app if it is not answering. check.sh's teardown stops the
+# app after every single-stage run (Q-B8), so a stage run on its own finds none.
+ensure_app() {
+  app_responds && return 0
+  [ -d "$APP_PATH" ] || return 1
+  relaunch_app
 }
 
 # ---- the feature under test ------------------------------------------------------

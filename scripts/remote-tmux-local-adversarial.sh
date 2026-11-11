@@ -1010,7 +1010,7 @@ EOF
 log "tmux: $("$TMUX_BIN" -V 2>/dev/null); old tmux: $([ -x "$TMUX_OLD_BIN" ] && "$TMUX_OLD_BIN" -V)"
 enable_betas
 FEATURE=0
-if app_responds; then
+if ensure_app; then
   feature_present && FEATURE=1
 else
   log "the tagged app ($TAG) is not answering on $APP_SOCKET"
