@@ -63,6 +63,10 @@ done
 mkdir -p "$ARTIFACTS"
 trap 'adv_cleanup; [ -n "${RELAUNCHED:-}" ] && relaunch_app >/dev/null 2>&1' EXIT
 
+# A probe whose client exits early must not take the whole suite down with
+# SIGPIPE on the next write to its input; the write fails and the check says so.
+trap '' PIPE
+
 FAKES="$ADV_TMP_ROOT/fakes"
 mkdir -p "$FAKES"
 REAL_TMUX="$TMUX_BIN"
@@ -113,28 +117,33 @@ assert_app_healthy() {
 }
 
 # ---- P1: tmux writes subscription values raw ----------------------------------
-# No cmux involved. Attaches a control client under script(1), subscribes to
-# pane_current_path the way cmux does, cds the pane into a directory whose
-# name holds a newline and a fake notification, and checks the raw stream.
+# No cmux involved. Attaches a control client with `tmux -C` (plain control
+# mode, which works on a pipe; -CC needs a tty, and script(1) exited at once
+# in the VM's job runner), subscribes to pane_current_path the way cmux does,
+# cds the pane into a directory whose name holds a newline and a fake
+# notification, and checks the raw stream. tmux writes subscription lines the
+# same way in -C and -CC.
 attack_P1() {
   local sock; sock="$(new_server p1)"
   local evil="$ADV_TMP_ROOT/p1/x"$'\n'"%cmux-adv-injected"
   mkdir -p "$evil" || { skip "the file system refused a directory name with a newline"; return; }
-  local fifo="$ADV_TMP_ROOT/p1/in" raw="$ARTIFACTS/P1-raw-control-stream.bin"
+  local fifo="$ADV_TMP_ROOT/p1/in" raw="$ARTIFACTS/P1-raw-control-stream.bin" err="$ARTIFACTS/P1-client-stderr.txt"
   mkfifo "$fifo"
-  ( script -q "$raw" "$TMUX_BIN" -S "$sock" -CC attach -t main < "$fifo" > /dev/null 2>&1 ) &
+  ( "$TMUX_BIN" -S "$sock" -C attach -t main < "$fifo" > "$raw" 2> "$err"; echo "client exit $?" >> "$err" ) &
   local spid=$!
   exec 7> "$fifo"
   printf 'refresh-client -B "cwd:%%0:#{pane_current_path}"\n' >&7
   sleep 1
   t "$sock" send-keys -t main "cd '$ADV_TMP_ROOT/p1/x'\$'\\n''%cmux-adv-injected'" Enter
-  sleep 2
+  sleep 3
   printf 'detach-client\n' >&7
   exec 7>&-
   wait_until 5 bash -c "! kill -0 $spid 2>/dev/null"; kill "$spid" 2>/dev/null
+  t "$sock" display-message -p -t main '#{pane_current_path}' > "$ARTIFACTS/P1-pane-path.txt" 2>&1
+  grep -a -n -A1 'subscription-changed' "$raw" > "$ARTIFACTS/P1-subscription-lines.txt" 2>/dev/null
   if [ ! -s "$raw" ]; then
-    skip "script(1) captured no control stream; see $raw"
-  elif tr -d '\r' < "$raw" | grep -q '^%cmux-adv-injected$'; then
+    fail "the control client captured nothing; its stderr: $(tr '\n' ' ' < "$err")"
+  elif tr -d '\r' < "$raw" | grep -aq '^%cmux-adv-injected$'; then
     info "FINDING: tmux $("$TMUX_BIN" -V) wrote a %subscription-changed value raw; the line '%cmux-adv-injected' arrived as its own control-mode line. A pane that cds into such a directory can inject %exit, %begin or %layout-change into any mirror (ssh, et or local). Raw stream: $raw"
     pass "probe completed (tmux behavior recorded)"
   else
@@ -469,7 +478,7 @@ attack_A7() {
   # A second, foreign control client (a stand-in for iTerm2's -CC) on the
   # same session: both must stay usable.
   local fifo="$ADV_TMP_ROOT/a7.fifo"; mkfifo "$fifo"
-  ( script -q /dev/null "$TMUX_BIN" -S "$sock" -CC attach -t main < "$fifo" > /dev/null 2>&1 ) &
+  ( "$TMUX_BIN" -S "$sock" -C attach -t main < "$fifo" > /dev/null 2>&1 ) &
   local fpid=$!
   exec 8> "$fifo"
   printf 'split-window -t main\n' >&8

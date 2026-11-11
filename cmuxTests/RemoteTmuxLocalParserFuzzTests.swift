@@ -148,7 +148,7 @@ private struct SplitMix64: RandomNumberGenerator {
         for chunk in randomChunks(stream, &rng) {
             got += parser.feed(Data(chunk))
         }
-        let firstDifference = zip(got, expected).firstIndex { $0 != $1 } ?? min(got.count, expected.count)
+        let firstDifference = firstMismatch(got, expected)
         let same = got == expected
         #expect(
             same,
@@ -196,7 +196,7 @@ private struct SplitMix64: RandomNumberGenerator {
             if got.contains(where: { if case .streamError = $0 { return true } else { return false } }) { break }
         }
         got = truncatedAtStreamError(got)
-        let firstDifference = zip(got, reference).firstIndex { $0 != $1 } ?? min(got.count, reference.count)
+        let firstDifference = firstMismatch(got, reference)
         #expect(
             got == reference,
             "seed 0x\(String(seed, radix: 16)): chunking changed message \(firstDifference) (whole \(reference.count), chunked \(got.count)); budgets line \(lineBudget) block \(blockBudget)"
@@ -413,6 +413,13 @@ private struct SplitMix64: RandomNumberGenerator {
             index = end
         }
         return chunks
+    }
+
+    /// Index of the first message that differs, or the shorter count when one
+    /// list is a prefix of the other.
+    private static func firstMismatch(_ a: [RemoteTmuxControlMessage], _ b: [RemoteTmuxControlMessage]) -> Int {
+        let shared = min(a.count, b.count)
+        return (0..<shared).first { a[$0] != b[$0] } ?? shared
     }
 
     private static func truncatedAtStreamError(_ messages: [RemoteTmuxControlMessage]) -> [RemoteTmuxControlMessage] {
