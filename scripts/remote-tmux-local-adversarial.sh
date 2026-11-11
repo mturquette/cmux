@@ -32,6 +32,14 @@
 #   A19 the control client is stopped (SIGSTOP), then detached or continued
 #   A20 a relative, long or deleted-cwd socket location from the CLI
 #   A21 a wrapper tmux whose child holds stderr open after tmux exits
+# A22 to A25 come from the independent review (review/review-63d4da35c1f.md):
+#   A22 (S6) --socket-path in a directory other users can write to, and a
+#       socket swapped in by another user between the check and the connect
+#   A23 (B1) an image pasted into a local mirror pane never invokes ssh or scp
+#   A24 (S1) with the beta off, or `attach <missing session>`, no tmux server
+#       or session is left behind
+#   A25 (S3) a session created from cmux's UI does not start in the app's
+#       working directory
 #
 # MANUAL CASES (need a tagged build and a person at the VM's screen; results
 # go to results/ as a run log):
@@ -60,7 +68,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.." || exit 2
 source scripts/remote-tmux-local-adversarial-lib.sh
 
-ALL_IDS="P1 P2 A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A13 A14 A15 A16 A17 A18 A19 A20 A21"
+ALL_IDS="P1 P2 A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A13 A14 A15 A16 A17 A18 A19 A20 A21 A22 A23 A24 A25"
 ONLY=""
 ARTIFACTS=""
 while [ $# -gt 0 ]; do
@@ -1249,6 +1257,214 @@ EOF
   [ "$RB_STATUS" -ne 124 ] && pass "the CLI returned after ${RB_ELAPSED}s although a child held tmux's stderr" \
     || fail "the CLI waited 60 s for stderr to close after tmux had exited (it reads stderr to end-of-file)"
   local p; for p in $(cat "$FAKES/stderrheld.pids"); do kill "$p" 2>/dev/null; done
+  t "$sock" kill-server 2>/dev/null
+}
+
+# ---- A22 (review S6): a socket in a directory other users can write to --------
+# R20: the app connects only to a socket owned by the user. In a directory
+# others can write to (mode 0777, no sticky bit) another user can rename their
+# own socket into place after the ownership check, so the path must be refused
+# outright. A socket directly in a root-owned sticky directory (/private/tmp)
+# is safe, because the sticky bit stops other users renaming it.
+attack_A22() {
+  require_feature || return
+  local dir="$ADV_TMP_ROOT/a22shared" sock out
+  mkdir -p "$dir"; chmod 0777 "$dir"
+  sock="$dir/s"
+  "$TMUX_BIN" -S "$sock" -f /dev/null new-session -d -s main || { fail "could not start the server"; return; }
+  track_server "$sock"
+  run_bounded 20 rpc remote.tmux.mirror "$(local_params "$sock")"
+  printf 'rpc(%s): %s\n' "$RB_STATUS" "$RB_OUT" > "$ARTIFACTS/A22.txt"
+  [ "$RB_STATUS" -ne 124 ] && rpc_refused && ! mentions_ssh "$RB_OUT" \
+    && pass "socket API: a socket in a directory others can write to is refused" \
+    || fail "socket API: a socket in a mode-0777 directory was not refused: $RB_OUT"
+  run_bounded 20 mirror_cli "$sock"; out="$RB_OUT"
+  printf 'cli(%s): %s\n' "$RB_STATUS" "$out" >> "$ARTIFACTS/A22.txt"
+  ended_cleanly && [ "$RB_STATUS" -ne 0 ] \
+    && pass "CLI: a socket in a directory others can write to is refused ($(printf '%s' "$out" | head -1))" \
+    || fail "CLI: a socket in a mode-0777 directory was not refused (status $RB_STATUS): $out"
+  sleep 1
+  no_control_clients "$sock" && pass "nothing attached to the socket in the shared directory" \
+    || { fail "a control client attached through the shared directory"; rpc remote.tmux.detach "$(local_params "$sock" main)" >/dev/null 2>&1; }
+
+  # Control: directly in root-owned, sticky /private/tmp, the same server mirrors.
+  local safe="/private/tmp/cmuxadv-a22.$$.s"
+  "$TMUX_BIN" -S "$safe" -f /dev/null new-session -d -s main && track_server "$safe"
+  run_bounded 20 mirror_rpc "$safe"
+  if [ "$RB_STATUS" -eq 0 ] && wait_until 10 has_control_client "$safe"; then
+    pass "control: a socket directly in sticky, root-owned /private/tmp still mirrors"
+    # shellcheck disable=SC2086
+    detach_mirror_workspaces "$safe" $(workspace_ids_from "$RB_OUT")
+  else
+    fail "control: a socket directly in /private/tmp did not mirror (the check is too broad?): $RB_OUT"
+  fi
+  t "$safe" kill-server 2>/dev/null; rm -f "$safe"
+
+  # The race itself, with a real second user when sudo allows: they keep
+  # renaming a link to their socket over ours while we try to attach.
+  if sudo -n true 2>/dev/null; then
+    sudo -n -u nobody "$TMUX_BIN" -S "$dir/theirs" -f /dev/null new-session -d -s theirs 2>/dev/null
+    sudo -n chmod 777 "$dir/theirs" 2>/dev/null
+    if [ -S "$dir/theirs" ]; then
+      ln -f "$sock" "$dir/ours"
+      track_server "$dir/ours"
+      ( i=0; while [ $i -lt 300 ]; do ln -f "$dir/ours" "$dir/.o"; mv -f "$dir/.o" "$sock"; i=$((i + 1)); done ) &
+      local mine=$!
+      sudo -n -u nobody /bin/sh -c "i=0; while [ \$i -lt 300 ]; do ln -f '$dir/theirs' '$dir/.t' && mv -f '$dir/.t' '$sock'; i=\$((i + 1)); done" 2>/dev/null &
+      local theirs=$!
+      local k w; for k in 1 2 3 4 5 6 7 8 9 10; do
+        run_bounded 20 rpc remote.tmux.mirror "$(local_params "$sock")"
+        for w in $(workspace_ids_from "$RB_OUT"); do close_workspace "$w"; done
+      done
+      wait "$mine" "$theirs" 2>/dev/null
+      [ "$(sudo -n -u nobody "$TMUX_BIN" -S "$dir/theirs" list-clients 2>/dev/null | grep -c .)" -eq 0 ] \
+        && pass "the swap race never attached to the other user's server" \
+        || fail "the swap race attached cmux to the other user's server"
+      sudo -n -u nobody "$TMUX_BIN" -S "$dir/theirs" kill-server 2>/dev/null
+    else
+      skip "could not start the other user's server for the swap race"
+    fi
+  else
+    skip "swap race: needs passwordless sudo to act as a second user"
+  fi
+  chmod 0700 "$dir"
+}
+
+# ---- A23 (review B1): pasting an image into a local mirror never uses ssh -------
+# R4 and R8: no ssh is involved, and a pasted image becomes a local path. The
+# app is relaunched with ssh, scp and sftp traps first on its PATH and as the
+# DEBUG ssh override; each trap only records that it ran.
+attack_A23() {
+  require_feature || return
+  local trap="$ADV_TMP_ROOT/a23trap" calls="$ARTIFACTS/A23-ssh-calls.log" b
+  mkdir -p "$trap"; : > "$calls"
+  for b in ssh scp sftp; do
+    printf '#!/bin/sh\necho "%s $*" >> "%s"\nexit 1\n' "$b" "$calls" > "$trap/$b"
+    chmod 755 "$trap/$b"
+  done
+  local sock; sock="$(new_server a23)"
+  RELAUNCHED=1
+  relaunch_app "PATH=$trap:$(dirname "$TMUX_BIN"):/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin" \
+    "CMUX_REMOTE_TMUX_SSH_FOR_TESTING=$trap/ssh" || { fail "could not relaunch the app with the ssh traps"; return; }
+  run_bounded 30 mirror_rpc "$sock"
+  local ids; ids="$(workspace_ids_from "$RB_OUT")"
+  wait_until 10 has_control_client "$sock" || { fail "mirror did not attach: $RB_OUT"; relaunch_app; RELAUNCHED=""; return; }
+  local surface
+  surface="$(rpc remote.tmux.pane_surfaces "$(local_params "$sock" main)" 2>/dev/null | python3 -I -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+d = d.get("result", d)
+panes = d.get("panes") or []
+print(panes[0].get("surface_id", "") if panes else "")
+')"
+  if [ -z "$surface" ]; then
+    fail "no surface found for the mirrored pane"
+  else
+    local image="$ADV_TMP_ROOT/a23 paste me.png"
+    python3 -I -c 'import base64, sys; open(sys.argv[1], "wb").write(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="))' "$image"
+    local params
+    params="$(python3 -I -c 'import json, sys; print(json.dumps({"surface_id": sys.argv[1], "paths": [sys.argv[2]], "route": "terminal", "payload": "image"}))' "$surface" "$image")"
+    run_bounded 20 rpc debug.terminal.simulate_file_drop "$params"
+    printf 'drop(%s): %s\n' "$RB_STATUS" "$RB_OUT" > "$ARTIFACTS/A23.txt"
+    sleep 4
+    t "$sock" capture-pane -p -J -t main > "$ARTIFACTS/A23-pane.txt" 2>/dev/null
+    [ ! -s "$calls" ] && pass "no ssh, scp or sftp ran for the paste" \
+      || fail "the paste ran ssh tools on a local mirror: $(tr '\n' ';' < "$calls")"
+    grep -q 'paste' "$ARTIFACTS/A23-pane.txt" && grep -q 'me\.png' "$ARTIFACTS/A23-pane.txt" \
+      && pass "the pane received the image's local path (R8)" \
+      || fail "the pane did not receive the local path (drop reply: $RB_OUT)"
+  fi
+  local w; for w in $ids; do close_workspace "$w"; done
+  t "$sock" kill-server 2>/dev/null
+  relaunch_app || fail "could not relaunch the app normally"
+  RELAUNCHED=""
+}
+
+# ---- A24 (review S1): a refused command leaves no tmux server or session -------
+# D7 lets the CLI start a server for a plain mirror. A command that then fails
+# must not leave one behind: with the remote tmux beta off, and for
+# `attach <session>` naming a session that does not exist.
+attack_A24() {
+  require_feature || return
+  local dir="$ADV_TMP_ROOT/a24" sock out
+  mkdir -p "$dir"; chmod 700 "$dir"; sock="$dir/s"
+  defaults write "$APP_BUNDLE_ID" remoteTmux.beta.enabled -bool false
+  run_bounded 20 mirror_cli "$sock"; out="$RB_OUT"
+  enable_betas
+  printf 'beta-off(%s): %s\n' "$RB_STATUS" "$out" > "$ARTIFACTS/A24.txt"
+  ended_cleanly && [ "$RB_STATUS" -ne 0 ] && pass "beta off: refused ($(printf '%s' "$out" | head -1))" \
+    || fail "beta off: status $RB_STATUS: $out"
+  if server_alive "$sock"; then
+    fail "beta off: the CLI left a tmux server behind, with sessions: $(t "$sock" list-sessions -F '#{session_name}' | tr '\n' ' ')"
+    t "$sock" kill-server
+  else
+    pass "beta off: no tmux server was started"
+  fi
+  run_bounded 20 cli tmux-mirror attach no-such-session --socket-path "$sock" --no-focus; out="$RB_OUT"
+  printf 'attach-missing-no-server(%s): %s\n' "$RB_STATUS" "$out" >> "$ARTIFACTS/A24.txt"
+  ended_cleanly && [ "$RB_STATUS" -ne 0 ] && pass "attach to a missing session with no server: refused" \
+    || fail "attach to a missing session with no server: status $RB_STATUS: $out"
+  if server_alive "$sock"; then
+    fail "attach to a missing session left a tmux server behind, with sessions: $(t "$sock" list-sessions -F '#{session_name}' | tr '\n' ' ')"
+    t "$sock" kill-server
+  else
+    pass "attach to a missing session with no server: no server was started"
+  fi
+  local sock2 before after
+  sock2="$(new_server a24b)"
+  before="$(t "$sock2" list-sessions 2>/dev/null | grep -c .)"
+  run_bounded 20 cli tmux-mirror attach no-such-session --socket-path "$sock2" --no-focus; out="$RB_OUT"
+  printf 'attach-missing-with-server(%s): %s\n' "$RB_STATUS" "$out" >> "$ARTIFACTS/A24.txt"
+  after="$(t "$sock2" list-sessions 2>/dev/null | grep -c .)"
+  ended_cleanly && [ "$RB_STATUS" -ne 0 ] && pass "attach to a missing session on a running server: refused" \
+    || fail "attach to a missing session on a running server: status $RB_STATUS: $out"
+  [ "$after" -eq "$before" ] && pass "and no session was added ($after)" \
+    || fail "a failed attach added sessions ($before -> $after)"
+  t "$sock2" kill-server 2>/dev/null
+}
+
+# ---- A25 (review S3): a session created from cmux's UI starts in $HOME ---------
+# D7: a session the app creates uses -c $HOME, because the app has no caller
+# directory and its own working directory means nothing to the user. With
+# "New Workspace on the remote host" on and a mirror workspace selected, New
+# Workspace (cmd+n) creates a tmux session on that server.
+attack_A25() {
+  require_feature || return
+  local key="remoteTmux.beta.newWorkspaceOnHost.enabled"
+  local prior; prior="$(defaults read "$APP_BUNDLE_ID" "$key" 2>/dev/null)"
+  defaults write "$APP_BUNDLE_ID" "$key" -bool true
+  local sock; sock="$(new_server a25)"
+  run_bounded 30 mirror_rpc "$sock"
+  local ids; ids="$(workspace_ids_from "$RB_OUT")"
+  wait_until 10 has_control_client "$sock" || { fail "mirror did not attach: $RB_OUT"; return; }
+  local first; first="$(printf '%s\n' $ids | head -1)"
+  cli workspace select --workspace "$first" >/dev/null 2>&1
+  local before; before="$(t "$sock" list-sessions -F '#{session_name}' 2>/dev/null | sort)"
+  run_bounded 10 rpc debug.shortcut.simulate '{"combo":"cmd+n"}'
+  printf 'shortcut(%s): %s\n' "$RB_STATUS" "$RB_OUT" > "$ARTIFACTS/A25.txt"
+  local new="" i=0
+  while [ "$i" -lt 100 ] && [ -z "$new" ]; do
+    new="$(comm -13 <(printf '%s\n' "$before") <(t "$sock" list-sessions -F '#{session_name}' 2>/dev/null | sort) | head -1)"
+    sleep 0.1; i=$((i + 1))
+  done
+  if [ -z "$new" ]; then
+    skip "New Workspace on a selected mirror created no tmux session through debug.shortcut.simulate, so the start directory could not be checked (see A25.txt)"
+  else
+    local spath ppath
+    spath="$(t "$sock" display-message -p -t "$new" '#{session_path}' 2>/dev/null)"
+    ppath="$(t "$sock" display-message -p -t "$new" '#{pane_current_path}' 2>/dev/null)"
+    printf 'new session %s: session_path=%s pane_current_path=%s HOME=%s\n' "$new" "$spath" "$ppath" "$HOME" >> "$ARTIFACTS/A25.txt"
+    [ "$spath" != "/" ] && [ "$ppath" != "/" ] && pass "the session made from cmux's UI did not start in /" \
+      || fail "the session made from cmux's UI started in / (session_path=$spath, pane=$ppath)"
+    [ "$spath" = "$HOME" ] && pass "it started in \$HOME, as D7 says" \
+      || fail "it started in '$spath', not \$HOME ($HOME)"
+  fi
+  if [ -n "$prior" ]; then defaults write "$APP_BUNDLE_ID" "$key" -bool "$([ "$prior" = 1 ] && echo true || echo false)"
+  else defaults delete "$APP_BUNDLE_ID" "$key" 2>/dev/null; fi
+  local w; for w in $ids; do close_workspace "$w"; done
   t "$sock" kill-server 2>/dev/null
 }
 
