@@ -67,6 +67,10 @@ extension TerminalController {
             RemoteTmuxBrokerSnapshot.shared.select(requestedName: $0)
         }
     ) -> RemoteTmuxHost? {
+        // A local server is named by its socket, not a destination: see remoteTmuxLocalHostResult.
+        if RemoteTmuxTransportKind.parse(params["transport"] as? String) == .local {
+            return try? remoteTmuxLocalHostResult(from: params).get()
+        }
         guard let destination = (params["host"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines),
             !destination.isEmpty,
@@ -147,6 +151,12 @@ extension TerminalController {
                 localized: "socket.remoteTmux.transportUnknown",
                 defaultValue: "transport is not one cmux knows; use ssh or et"
             )
+        }
+        if RemoteTmuxTransportKind.parse(params["transport"] as? String) == .local {
+            if case let .failure(refusal) = remoteTmuxLocalHostResult(from: params) {
+                return refusal.message
+            }
+            return nil
         }
         if let transportPort = params["transport_port"] as? Int, !(1...65535).contains(transportPort) {
             return String(

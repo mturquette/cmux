@@ -153,7 +153,7 @@ actor RemoteTmuxSSHTransport {
         try await assertMinimumTmuxVersion(checkClientWhenNoServer: createIfEmpty)
         var sessions = try await listSessions()
         if sessions.isEmpty, createIfEmpty {
-            _ = try? await runTmux(["new-session", "-d"])
+            _ = try? await runTmux(["new-session", "-d"] + transportProfile.appCreatedSessionArguments())
             sessions = try await listSessions()
         }
         return sessions
@@ -185,7 +185,9 @@ actor RemoteTmuxSSHTransport {
         }
         let remoteCommand: String
         if remoteArgs.first == "tmux" {
-            remoteCommand = RemoteTmuxHost.tmuxRemoteCommand(arguments: Array(remoteArgs.dropFirst()))
+            remoteCommand = RemoteTmuxHost.tmuxRemoteCommand(
+                arguments: transportProfile.tmuxServerArguments(host: host) + remoteArgs.dropFirst()
+            )
         } else {
             remoteCommand = remoteArgs
                 .map { RemoteTmuxHost.shellSingleQuoted($0) }
@@ -193,7 +195,8 @@ actor RemoteTmuxSSHTransport {
         }
         return try await Self.runProcess(
             executable: oneShotExecutablePath,
-            arguments: transportProfile.oneShotArgv(host: host, remoteCommand: remoteCommand)
+            arguments: transportProfile.oneShotArgv(host: host, remoteCommand: remoteCommand),
+            environment: transportProfile.oneShotEnvironment(inheriting: ProcessInfo.processInfo.environment)
         )
     }
 
@@ -489,13 +492,19 @@ actor RemoteTmuxSSHTransport {
     /// We capture only the raw fds (`Int32`, `Sendable`) across the task
     /// boundary — never the non-`Sendable` `FileHandle` — and the `Pipe`s stay
     /// alive because `process` retains them until this function returns.
+    ///
+    /// `environment` nil inherits the app's environment, as ssh's master commands do.
     private static func runProcess(
         executable: String,
-        arguments: [String]
+        arguments: [String],
+        environment: [String: String]? = nil
     ) async throws -> RemoteTmuxCommandResult {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
+        if let environment {
+            process.environment = environment
+        }
 
         let outPipe = Pipe()
         let errPipe = Pipe()

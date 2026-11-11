@@ -758,7 +758,21 @@ final class RemoteTmuxControlConnection {
             sessionName: sessionName,
             mode: mode
         )
-        if transportProfile.requiresPseudoTerminal {
+        // A pty cmux owns, so the kernel hangs the client up the moment cmux dies.
+        // See RemoteTmuxLocalPseudoTerminal for the measurement behind it.
+        let ownedPseudoTerminal: RemoteTmuxLocalPseudoTerminal?
+        if transportProfile.requiresPseudoTerminal, transportProfile.ownsPseudoTerminal {
+            record("transport-owned-pty")
+            do {
+                ownedPseudoTerminal = try RemoteTmuxLocalPseudoTerminal()
+            } catch {
+                stderrBuffer.append("\(error)\n")
+                throw RemoteTmuxError.launchFailed("\(error)")
+            }
+            proc.executableURL = URL(fileURLWithPath: transportExecutable)
+            proc.arguments = transportArgv
+        } else if transportProfile.requiresPseudoTerminal {
+            ownedPseudoTerminal = nil
             // Not because the transport is silent on pipes — it is not, measured — but because
             // without usable terminal modes the client cannot go raw and the same stream arrives
             // far larger, padded with full-screen redraws. See requiresPseudoTerminal.
@@ -768,18 +782,32 @@ final class RemoteTmuxControlConnection {
                 executable: transportExecutable, arguments: transportArgv
             )
         } else {
+            ownedPseudoTerminal = nil
             proc.executableURL = URL(fileURLWithPath: transportExecutable)
             proc.arguments = transportArgv
         }
         proc.environment = transportProfile.childProcessEnvironment(
             inheriting: ProcessInfo.processInfo.environment
         )
-        let inPipe = Pipe(), outPipe = Pipe(), errPipe = Pipe()
-        proc.standardInput = inPipe
-        proc.standardOutput = outPipe
+        let errPipe = Pipe()
+        let stdinHandle: FileHandle
+        let reader: FileHandle
+        if let ownedPseudoTerminal {
+            // The slave is the client's terminal; stderr stays a pipe for failure classification.
+            proc.standardInput = ownedPseudoTerminal.slaveHandle
+            proc.standardOutput = ownedPseudoTerminal.slaveHandle
+            stdinHandle = ownedPseudoTerminal.masterWriteHandle
+            reader = ownedPseudoTerminal.masterReadHandle
+        } else {
+            let inPipe = Pipe(), outPipe = Pipe()
+            proc.standardInput = inPipe
+            proc.standardOutput = outPipe
+            stdinHandle = inPipe.fileHandleForWriting
+            reader = outPipe.fileHandleForReading
+        }
         proc.standardError = errPipe
         let stdinWriter = RemoteTmuxControlPipeWriter(
-            handle: inPipe.fileHandleForWriting,
+            handle: stdinHandle,
             label: "com.cmux.remote-tmux.stdin.\(UUID().uuidString)",
             maxPendingBytes: Self.maxPendingStdinBytes,
             onFailure: { [weak self] in
@@ -795,7 +823,6 @@ final class RemoteTmuxControlConnection {
                 self?.handleStdoutBackpressureOverflow()
             }
         )
-        let reader = outPipe.fileHandleForReading
         stdoutPipeReader.attach(to: reader)
         let stderrPipeReader = RemoteTmuxProcessOutputReader(
             label: "com.cmux.remote-tmux.stderr.\(UUID().uuidString)",
@@ -814,6 +841,9 @@ final class RemoteTmuxControlConnection {
             stderrPipeReader.processDidExit()
         }
 
+        // The child holds its own copy of the slave. The parent's has to go on every path, or
+        // the master never sees end-of-file when the client exits.
+        defer { try? ownedPseudoTerminal?.slaveHandle.close() }
         do {
             try proc.run()
         } catch {

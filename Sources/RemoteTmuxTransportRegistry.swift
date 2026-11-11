@@ -10,6 +10,9 @@ enum RemoteTmuxTransportKind: String, Sendable, Equatable, CaseIterable {
     /// EternalTerminal: keeps its session across a network change, and is spawned under a pty
     /// (see ``RemoteTmuxTransportProfile/requiresPseudoTerminal`` for what that does and does not buy).
     case et
+    /// tmux on this Mac, reached through its server socket under a pty cmux owns. No ssh is
+    /// involved; see ``RemoteTmuxLocalTransportProfile``.
+    case local
 
     /// Parses a user-supplied value, rejecting anything unrecognized.
     static func parse(_ raw: String?) -> RemoteTmuxTransportKind? {
@@ -26,6 +29,9 @@ enum RemoteTmuxTransportKind: String, Sendable, Equatable, CaseIterable {
         switch self {
         case .ssh: return configured ?? 22
         case .et: return configured ?? 2022
+        // A local server is named by its socket path, not a port. Zero keeps the value total
+        // without pretending one exists; the boundary refuses `transport_port` for local hosts.
+        case .local: return 0
         }
     }
 
@@ -36,7 +42,7 @@ enum RemoteTmuxTransportKind: String, Sendable, Equatable, CaseIterable {
     /// specific route.
     var usesTransportBroker: Bool {
         switch self {
-        case .ssh: return false
+        case .ssh, .local: return false
         case .et: return true
         }
     }
@@ -48,7 +54,7 @@ enum RemoteTmuxTransportKind: String, Sendable, Equatable, CaseIterable {
     /// without making the host model grow another transport-specific property.
     var supportsTransportHelperPath: Bool {
         switch self {
-        case .ssh: return false
+        case .ssh, .local: return false
         case .et: return true
         }
     }
@@ -82,6 +88,11 @@ enum RemoteTmuxTransportKind: String, Sendable, Equatable, CaseIterable {
                 // `brokeredArgvPutsBrokerFlagsFirstAndDropsEndpointFlags`.
                 remoteTerminalPath: transportHelperPath,
                 broker: broker
+            )
+        case .local:
+            // The server socket travels on the host, which every argv call receives.
+            return RemoteTmuxLocalTransportProfile(
+                homeDirectory: FileManager.default.homeDirectoryForCurrentUser.path
             )
         }
     }
@@ -174,6 +185,27 @@ protocol RemoteTmuxTransportProfile: Sendable {
     /// ssh has no master, so those steps are skipped rather than run against a socket that will
     /// never exist. Defaults to true, which is what ssh and et need.
     var usesSharedControlMaster: Bool { get }
+
+    /// tmux arguments that select the server, placed before every tmux command this host runs.
+    ///
+    /// Empty by default, which leaves the choice to the remote tmux. A transport that names its
+    /// server explicitly returns it here, so a one-shot and the control stream cannot reach
+    /// different servers.
+    func tmuxServerArguments(host: RemoteTmuxHost) -> [String]
+
+    /// The environment one-shot commands run with, given the app's own. Defaults to the app's.
+    func oneShotEnvironment(inheriting base: [String: String]) -> [String: String]
+
+    /// Whether the control stream runs on a pty cmux allocates itself rather than under
+    /// `/usr/bin/script`. Only meaningful when ``requiresPseudoTerminal`` is true.
+    ///
+    /// Defaults to false. See ``RemoteTmuxLocalPseudoTerminal`` for what an owned pty changes when
+    /// cmux crashes.
+    var ownsPseudoTerminal: Bool { get }
+
+    /// Extra `new-session` arguments for a session the app itself creates because the server had
+    /// none. Defaults to none.
+    func appCreatedSessionArguments() -> [String]
 
     /// Whether the transport needs a pseudo-terminal rather than pipes.
     ///
@@ -270,6 +302,18 @@ extension RemoteTmuxTransportProfile {
 
     /// ssh and et both send one-shots through the shared master.
     var usesSharedControlMaster: Bool { true }
+
+    /// The remote tmux picks its own server.
+    func tmuxServerArguments(host: RemoteTmuxHost) -> [String] { [] }
+
+    /// One-shots inherit the app's environment.
+    func oneShotEnvironment(inheriting base: [String: String]) -> [String: String] { base }
+
+    /// `/usr/bin/script` provides the pty.
+    var ownsPseudoTerminal: Bool { false }
+
+    /// A remote server starts the session where tmux's own defaults put it.
+    func appCreatedSessionArguments() -> [String] { [] }
 }
 
 /// What end-of-stream on the control connection means.

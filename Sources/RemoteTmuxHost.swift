@@ -76,6 +76,13 @@ struct RemoteTmuxHost: Sendable, Equatable, Identifiable {
     /// launch setting; changing it on a live endpoint requires detaching first.
     let transportHelperPath: String?
 
+    /// The absolute path of the tmux server socket, for a ``RemoteTmuxTransportKind/local`` host.
+    ///
+    /// It is the whole identity of a local endpoint: the CLI resolves it from the caller's shell
+    /// and the socket boundary canonicalizes it, so two spellings of one server arrive here as one
+    /// path. `nil` for ssh and et hosts.
+    let serverSocketPath: String?
+
     init(
         destination: String,
         port: Int? = nil,
@@ -83,7 +90,8 @@ struct RemoteTmuxHost: Sendable, Equatable, Identifiable {
         transport: RemoteTmuxTransportKind = .ssh,
         transportPort: Int? = nil,
         transportBroker: RemoteTmuxTransportBroker? = nil,
-        transportHelperPath: String? = nil
+        transportHelperPath: String? = nil,
+        serverSocketPath: String? = nil
     ) {
         self.destination = destination
         self.port = port
@@ -92,6 +100,22 @@ struct RemoteTmuxHost: Sendable, Equatable, Identifiable {
         self.transportPort = transportPort
         self.transportBroker = transportBroker
         self.transportHelperPath = transportHelperPath
+        self.serverSocketPath = serverSocketPath
+    }
+
+    /// The name a local host shows where an ssh host shows its destination.
+    static let localDestination = "local"
+
+    /// A host for the tmux server listening on `serverSocketPath` on this Mac.
+    ///
+    /// - Parameter serverSocketPath: an absolute, canonical socket path; the socket boundary
+    ///   checks and canonicalizes it before building the host.
+    static func local(serverSocketPath: String) -> RemoteTmuxHost {
+        RemoteTmuxHost(
+            destination: localDestination,
+            transport: .local,
+            serverSocketPath: serverSocketPath
+        )
     }
 
     /// Resolve launch options together so dedicated and shared connections cannot
@@ -136,6 +160,11 @@ struct RemoteTmuxHost: Sendable, Equatable, Identifiable {
     /// distinct endpoints must never collapse onto one socket and risk routing a
     /// command to the wrong server.
     var connectionHash: String {
+        // A local server is its socket and nothing else. The `local` tag comes first, so no
+        // destination, port or identity file of an ssh host can produce the same fingerprint.
+        if transport == .local {
+            return Self.fnv1a64Hex("\(RemoteTmuxTransportKind.local.rawValue)\u{1f}\(serverSocketPath ?? "")")
+        }
         // The transport and its port belong in the fingerprint because they decide what the
         // control stream actually is. Everything keyed by this hash — the attach single-flight,
         // the transport registry, matching a mirror to a host — would otherwise treat an ssh
