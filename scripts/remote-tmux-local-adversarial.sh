@@ -500,20 +500,36 @@ EOF
   rpc remote.tmux.detach "$(local_params "$sock" main)" >/dev/null 2>&1
   wait_until 10 no_control_clients "$sock"
 
-  # Garbage as the tmux the app runs: the app's version probe, one-shots and
-  # control stream all get garbage. The attach must be refused, in bounded
-  # time, without ssh wording.
-  RELAUNCHED=1
-  relaunch_app "PATH=$garbage:/usr/bin:/bin" || { fail "could not relaunch the app with the garbage tmux first on PATH"; return; }
-  run_bounded 40 mirror_rpc "$sock"
-  local garbage_out="$RB_OUT" garbage_status="$RB_STATUS"
-  printf 'garbage-app(%s after %ss): %s\n' "$garbage_status" "$RB_ELAPSED" "$garbage_out" >> "$msgs"
-  [ "$garbage_status" -ne 124 ] && rpc_refused && pass "garbage tmux in the app: refused after ${RB_ELAPSED}s" \
-    || fail "garbage tmux in the app: not refused cleanly (status $garbage_status): $garbage_out"
-  mentions_ssh "$garbage_out" && fail "garbage tmux message talks about ssh: $garbage_out" || true
-  no_control_clients "$sock" && pass "garbage tmux in the app: nothing attached" || fail "garbage tmux in the app: a client attached"
-  relaunch_app || { fail "could not relaunch the app normally"; return; }
-  RELAUNCHED=""
+  # Garbage as the tmux the app runs. Since D4a the app runs a running
+  # server's own binary, so the garbage can only be reached two ways (Q-A14):
+  # (a) the server's binary was deleted and the garbage is the app's fallback;
+  # (b) the server's binary path now holds the garbage itself (replaced in
+  # place). Each must be refused, in bounded time, without ssh wording, and
+  # nothing may attach.
+  local gsock garbage_out="" garbage_status=0 how
+  for how in deleted replaced; do
+    gsock="$(copied_server "a3$how" "$REAL_TMUX")" || { fail "garbage ($how): could not start a server from a copy"; continue; }
+    if [ "$how" = deleted ]; then
+      copied_server_delete "a3$how"
+      RELAUNCHED=1
+      relaunch_app "PATH=$garbage:/usr/bin:/bin" || { fail "could not relaunch the app with the garbage tmux first on PATH"; return; }
+    else
+      copied_server_replace "a3$how" "$garbage/tmux"
+    fi
+    run_bounded 40 mirror_rpc "$gsock"
+    printf 'garbage-app-%s(%s after %ss): %s\n' "$how" "$RB_STATUS" "$RB_ELAPSED" "$RB_OUT" >> "$msgs"
+    [ "$how" = deleted ] && { garbage_out="$RB_OUT"; garbage_status="$RB_STATUS"; }
+    [ "$RB_STATUS" -ne 124 ] && rpc_refused && pass "garbage tmux in the app ($how binary): refused after ${RB_ELAPSED}s" \
+      || fail "garbage tmux in the app ($how binary): not refused cleanly (status $RB_STATUS): $RB_OUT"
+    mentions_ssh "$RB_OUT" && fail "garbage tmux message ($how binary) talks about ssh: $RB_OUT" || true
+    no_control_clients "$gsock" && pass "garbage tmux in the app ($how binary): nothing attached" \
+      || fail "garbage tmux in the app ($how binary): a client attached"
+    t "$gsock" kill-server 2>/dev/null
+    if [ "$how" = deleted ]; then
+      relaunch_app || { fail "could not relaunch the app normally"; return; }
+      RELAUNCHED=""
+    fi
+  done
 
   : > "$FAKES/hang.pids"
   run_bounded 90 env PATH="$hang:/usr/bin:/bin" "$ADV_REPO_ROOT/scripts/cmux-debug-cli.sh" tmux-mirror --socket-path "$sock" --no-focus
@@ -552,6 +568,24 @@ EOF
   assert_app_healthy
 }
 
+# copied_server <name> <tmux-binary>: starts a server from a private copy of
+# the binary at $ADV_TMP_ROOT/<name>-bin/tmux and prints its socket. Since D4a
+# the app runs the server's own binary while it exists, so a test that needs
+# the app's fallback tmux deletes this copy (copied_server_delete), and a test
+# of a binary replaced in place swaps it (copied_server_replace).
+copied_server() {
+  local name="$1" src="$2" bindir="$ADV_TMP_ROOT/$1-bin" dir="$ADV_TMP_ROOT/$1"
+  mkdir -p "$bindir" "$dir"; chmod 700 "$dir"
+  cp "$src" "$bindir/tmux" || return 1
+  "$bindir/tmux" -S "$dir/s" -f /dev/null new-session -d -s main -x 160 -y 48 || return 1
+  track_server "$dir/s" "$src"
+  printf '%s\n' "$dir/s"
+}
+copied_server_delete() { rm -f "$ADV_TMP_ROOT/$1-bin/tmux"; }
+# A new file at the same path, as install(1) and `make install` do it. Writing
+# over a running executable in place could get the server killed by macOS.
+copied_server_replace() { rm -f "$ADV_TMP_ROOT/$1-bin/tmux" && cp "$2" "$ADV_TMP_ROOT/$1-bin/tmux"; }
+
 # ---- A4: tmux 3.2a (oldest supported) and a fake 3.1 --------------------------
 attack_A4() {
   require_feature || return
@@ -578,19 +612,72 @@ attack_A4() {
     "$TMUX_OLD_BIN" -S "$sock" kill-server 2>/dev/null
     relaunch_app || { fail "could not relaunch the app normally"; return; }
     RELAUNCHED=""
-    # (b) A 3.2a server with the app's newer tmux as client: tmux cannot
-    # attach across protocol versions (Q-A6). The refusal must say so, not
-    # fall back to a generic failure; Q-A6's option 1 words this message.
+    # (b) A 3.2a server while the app's own tmux is 3.6a. A 3.6a control
+    # client hangs silently against a 3.2a server (Q-C9, probe P2), so the
+    # owner's decision (Q-C9 option 1, Q-A13) is that the app runs the
+    # server's own binary, falls back to its own tmux only when the releases
+    # match exactly, and otherwise refuses naming both releases.
+    local new_rel old_rel
+    new_rel="$("$TMUX_BIN" -V | awk '{print $2}')"; old_rel="$("$TMUX_OLD_BIN" -V | awk '{print $2}')"
+    # (b1) The server's binary still exists: the app runs it, and mirrors.
     sock="$(new_server a4mixed "$TMUX_OLD_BIN")"
     run_bounded 30 mirror_rpc "$sock"
-    printf 'v32a-server-newer-client(%s): %s\n' "$RB_STATUS" "$RB_OUT" >> "$ARTIFACTS/A4-messages.txt"
-    if [ "$RB_STATUS" -ne 124 ] && rpc_refused; then
-      printf '%s' "$RB_OUT" | grep -qiE 'version|protocol' \
-        && pass "3.2a server with a newer client: refused, and the message names the version mismatch" \
-        || fail "3.2a server with a newer client: refused, but the message does not name the version mismatch: $RB_OUT"
+    printf 'b1 server binary present(%s): %s\n' "$RB_STATUS" "$RB_OUT" >> "$ARTIFACTS/A4-messages.txt"
+    if [ "$RB_STATUS" -eq 0 ] && TMUX_BIN="$TMUX_OLD_BIN" wait_until 10 has_control_client "$sock"; then
+      pass "b1: a $old_rel server with $new_rel as the app's tmux mirrors through the server's own binary"
+      "$TMUX_OLD_BIN" -S "$sock" new-window -t main
+      wait_until 5 window_count_is "$sock" 2 && pass "b1: a window added on the server reaches the mirror" \
+        || fail "b1: a window added on the server did not reach the mirror"
+      rpc remote.tmux.detach "$(local_params "$sock" main)" >/dev/null 2>&1
     else
-      fail "3.2a server with a newer client: status $RB_STATUS, not a clean refusal: $RB_OUT"
+      fail "b1: a $old_rel server whose binary exists did not mirror (status $RB_STATUS): $RB_OUT"
     fi
+    "$TMUX_OLD_BIN" -S "$sock" kill-server 2>/dev/null
+    # (b2) The server's binary was deleted (as `brew upgrade` does), and the
+    # app's fallback is $new_rel: refused, naming both releases, in bounded time.
+    sock="$(copied_server a4deleted "$TMUX_OLD_BIN")" || { fail "b2: could not start a server from a copy"; return; }
+    copied_server_delete a4deleted
+    run_bounded 30 mirror_rpc "$sock"
+    printf 'b2 binary deleted, fallback %s(%s after %ss): %s\n' "$new_rel" "$RB_STATUS" "$RB_ELAPSED" "$RB_OUT" >> "$ARTIFACTS/A4-messages.txt"
+    if [ "$RB_STATUS" -ne 124 ] && rpc_refused; then
+      printf '%s' "$RB_OUT" | grep -qF "$old_rel" && printf '%s' "$RB_OUT" | grep -qF "$new_rel" \
+        && pass "b2: refused after ${RB_ELAPSED}s, naming both $old_rel and $new_rel" \
+        || fail "b2: refused, but the message does not name both $old_rel and $new_rel: $RB_OUT"
+    else
+      fail "b2: a deleted $old_rel binary with a $new_rel fallback was not refused cleanly (status $RB_STATUS): $RB_OUT"
+    fi
+    TMUX_BIN="$TMUX_OLD_BIN" no_control_clients "$sock" && pass "b2: nothing attached" || fail "b2: a control client attached"
+    # (b3) The same server, with the app relaunched so its fallback is 3.2a:
+    # the releases match exactly, so it mirrors.
+    RELAUNCHED=1
+    relaunch_app "PATH=$old_dir:/usr/bin:/bin" || { fail "b3: could not relaunch the app with $old_rel first on PATH"; return; }
+    run_bounded 30 mirror_rpc "$sock"
+    printf 'b3 binary deleted, fallback %s(%s): %s\n' "$old_rel" "$RB_STATUS" "$RB_OUT" >> "$ARTIFACTS/A4-messages.txt"
+    [ "$RB_STATUS" -eq 0 ] && TMUX_BIN="$TMUX_OLD_BIN" wait_until 10 has_control_client "$sock" \
+      && pass "b3: with a matching $old_rel fallback, the server with a deleted binary mirrors" \
+      || fail "b3: with a matching $old_rel fallback, the mirror did not attach: $RB_OUT"
+    rpc remote.tmux.detach "$(local_params "$sock" main)" >/dev/null 2>&1
+    "$TMUX_OLD_BIN" -S "$sock" kill-server 2>/dev/null
+    relaunch_app || { fail "could not relaunch the app normally"; return; }
+    RELAUNCHED=""
+    # (b4, not in Q-A13) The server's binary path still exists but now holds
+    # another release, as after `make install` of a new tmux over the old one
+    # while a server runs. Trusting the path would start a $new_rel client
+    # against a $old_rel server, which hangs silently. Expected: no hang, a
+    # refusal, and a message naming both releases.
+    sock="$(copied_server a4replaced "$TMUX_OLD_BIN")" || { fail "b4: could not start a server from a copy"; return; }
+    copied_server_replace a4replaced "$TMUX_BIN"
+    run_bounded 30 mirror_rpc "$sock"
+    printf 'b4 binary replaced by %s(%s after %ss): %s\n' "$new_rel" "$RB_STATUS" "$RB_ELAPSED" "$RB_OUT" >> "$ARTIFACTS/A4-messages.txt"
+    if [ "$RB_STATUS" -ne 124 ] && rpc_refused; then
+      pass "b4: a binary replaced in place by $new_rel is refused after ${RB_ELAPSED}s"
+      printf '%s' "$RB_OUT" | grep -qF "$old_rel" && printf '%s' "$RB_OUT" | grep -qF "$new_rel" \
+        && pass "b4: and the message names both $old_rel and $new_rel" \
+        || fail "b4: the refusal does not name both releases (the app trusted the path without checking its release?): $RB_OUT"
+    else
+      fail "b4: a binary replaced in place by $new_rel was not refused cleanly (status $RB_STATUS after ${RB_ELAPSED}s): $RB_OUT"
+    fi
+    TMUX_BIN="$TMUX_OLD_BIN" no_control_clients "$sock" && pass "b4: nothing attached" || fail "b4: a control client attached"
     "$TMUX_OLD_BIN" -S "$sock" kill-server 2>/dev/null
   else
     skip "TMUX_OLD_BIN ($TMUX_OLD_BIN) is not installed"
@@ -617,21 +704,17 @@ esac
 exec "$REAL_TMUX" "\$@"
 EOF
   fake31="$FAKE_DIR"
-  local sock31; sock31="$(new_server a4fake)"
-  run_bounded 30 env PATH="$fake31:/usr/bin:/bin" "$ADV_REPO_ROOT/scripts/cmux-debug-cli.sh" tmux-mirror --socket-path "$sock31" --no-focus
-  printf 'fake31(%s): %s\n' "$RB_STATUS" "$RB_OUT" > "$ARTIFACTS/A4-messages.txt"
-  # The CLI may delegate the version gate to the app, which resolves tmux
-  # from its own PATH. Relaunch the app with the fake first if the CLI did not
-  # refuse, so the app-side gate is exercised too.
-  if [ "$RB_STATUS" -eq 0 ]; then
-    info "the CLI did not gate the version itself; checking the app's gate with the fake on the app's PATH"
-    t "$sock31" kill-server; sock31="$(new_server a4fake2)"
-    RELAUNCHED=1
-    relaunch_app "PATH=$fake31:/usr/bin:/bin" || { fail "could not relaunch the app with the fake PATH"; return; }
-    run_bounded 30 mirror_rpc "$sock31"
-    printf 'fake31-app(%s): %s\n' "$RB_STATUS" "$RB_OUT" >> "$ARTIFACTS/A4-messages.txt"
-    relaunch_app; RELAUNCHED=""
-  fi
+  # The server is started from a copy that is then deleted, so the app has
+  # to use its fallback tmux, which is the fake (Q-A14). The app probes the
+  # server's #{version} and the fallback's -V through the fake; both say 3.1,
+  # they match, and the version gate must then refuse 3.1 as too old.
+  local sock31; sock31="$(copied_server a4fake "$REAL_TMUX")" || { fail "could not start the 3.1 case's server"; return; }
+  copied_server_delete a4fake
+  RELAUNCHED=1
+  relaunch_app "PATH=$fake31:/usr/bin:/bin" || { fail "could not relaunch the app with the fake PATH"; return; }
+  run_bounded 30 mirror_rpc "$sock31"
+  printf 'fake31-app(%s after %ss): %s\n' "$RB_STATUS" "$RB_ELAPSED" "$RB_OUT" >> "$ARTIFACTS/A4-messages.txt"
+  relaunch_app; RELAUNCHED=""
   case "$RB_OUT" in
     *3.1*) pass "tmux 3.1 is refused and the message names the detected version" ;;
     *) fail "tmux 3.1 was not refused with its version: $RB_OUT" ;;
