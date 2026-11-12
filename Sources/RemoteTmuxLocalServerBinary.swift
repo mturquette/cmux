@@ -147,6 +147,11 @@ struct RemoteTmuxLocalServerBinary: Sendable {
         let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }
+
+    /// Red stub: returns the text as it came.
+    static func displayablePath(_ output: String) -> String? {
+        output.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 }
 
 /// What cmux learned when it ran a server's candidate binary with `-V`, kept per server process so

@@ -64,6 +64,44 @@ import Testing
         #expect(RemoteTmuxLocalServerBinary.release(fromServerVersionOutput: " \n") == nil)
     }
 
+    /// A release is accepted only if it looks like one, because the text comes from a binary cmux
+    /// does not trust and ends up in a message the CLI prints to the user's terminal.
+    @Test(arguments: [
+        ("tmux 3.2a", "3.2a"), ("tmux 3.6", "3.6"), ("tmux 3.4-rc", "3.4-rc"),
+        ("tmux next-3.6", "next-3.6"), ("tmux master", "master"),
+        ("tmux 3.2a\u{1b}]0;owned\u{07}", nil), ("tmux \u{1b}[31m3.2a", nil),
+        ("tmux 3.2a;rm", nil), ("tmux 33333333333333333333.1", nil), ("tmux v3.2", nil),
+    ] as [(String, String?)])
+    func onlyAReleaseShapedVersionIsAccepted(output: String, expected: String?) {
+        #expect(RemoteTmuxLocalServerBinary.release(fromClientVersionOutput: output + "\n") == expected)
+        let serverOutput = String(output.dropFirst("tmux ".count))
+        #expect(RemoteTmuxLocalServerBinary.release(fromServerVersionOutput: serverOutput + "\n") == expected)
+    }
+
+    /// A path is quoted in a message only if it is one absolute line with nothing hidden in it.
+    @Test func onlyAPlainAbsolutePathIsQuoted() {
+        #expect(RemoteTmuxLocalServerBinary.displayablePath("/opt/homebrew/bin/tmux\n") == "/opt/homebrew/bin/tmux")
+        #expect(RemoteTmuxLocalServerBinary.displayablePath("tmux") == nil)
+        #expect(RemoteTmuxLocalServerBinary.displayablePath("/tmp/\u{1b}[2Jx/tmux") == nil)
+        #expect(RemoteTmuxLocalServerBinary.displayablePath("/a\n/b") == nil)
+    }
+
+    /// The fallback tmux prints garbage for `-V`, and the server's version probe, run through the
+    /// same fallback, prints garbage too: the refusal names neither, only "unknown".
+    @Test func garbageVersionsNeverReachTheMessage() async throws {
+        let garbage = "tmux \u{1b}]0;owned\u{07}x"
+        let fake = try VersionShell(server: "\u{1b}[31mbad", client: "", clientLine: garbage)
+        defer { fake.cleanUp() }
+        let transport = fake.transport(Self.profile(candidate: nil, checked: nil))
+        let unknown = RemoteTmuxError.unknownVersionDisplayName
+
+        await #expect(throws: RemoteTmuxError.localTmuxVersionsDiffer(
+            server: unknown, client: unknown, clientPath: VersionShell.resolvedPath,
+            socketPath: fake.host.serverSocketPath ?? "")) {
+            try await transport.assertClientMatchesServer()
+        }
+    }
+
     /// The candidate names the file as well as the process, so a binary rebuilt in place at the
     /// same path, after an attach checked it, is a new candidate and is checked again.
     @Test func aCandidateNamesItsFileSoARebuildIsCheckedAgain() throws {
@@ -346,7 +384,7 @@ import Testing
         let host = RemoteTmuxHost.local(serverSocketPath: "/tmp/cmux-lt-absent/default")
         private let log: String
 
-        init(server: String, client: String, candidateOutput: String = "") throws {
+        init(server: String, client: String, candidateOutput: String = "", clientLine: String? = nil) throws {
             root = NSTemporaryDirectory() + "remote-tmux-sb-\(UUID().uuidString)"
             try FileManager.default.createDirectory(atPath: root, withIntermediateDirectories: true)
             log = root + "/calls.log"
@@ -358,7 +396,7 @@ import Testing
             case "$2" in
               *"#{version}"*) printf '\(server)\\n'; exit 0 ;;
               *"'\(candidate.path)' '-V'"*) printf '%s\\n' '\(candidateOutput)'; exit 0 ;;
-              *"'-V'"*) printf 'tmux \(client)\\n'; exit 0 ;;
+              *"'-V'"*) printf '%s\\n' '\(clientLine ?? "tmux " + client)'; exit 0 ;;
               *cmux-remote-executable*) printf '\(Self.resolvedPath)\\n'; exit 0 ;;
               *) exit 0 ;;
             esac
