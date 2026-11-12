@@ -29,8 +29,27 @@ struct RemoteTmuxLocalTransportProfile: RemoteTmuxTransportProfile {
     /// Where a session the app creates starts. Injected so tests can use a temporary directory.
     let homeDirectory: String
 
-    init(homeDirectory: String) {
+    /// Finds the running server's own binary from its socket path. Injected so tests can stand in
+    /// for a server, or for one whose binary is gone.
+    let serverExecutable: @Sendable (String) -> String?
+
+    /// Variables set on every child on top of the app's environment. Tests use it to choose which
+    /// tmux the resolver finds; the app passes none.
+    let environmentOverrides: [String: String]
+
+    /// See ``controlModeStartDeadline``. Injected so a test can use a short limit.
+    let controlModeStartLimit: Duration
+
+    init(
+        homeDirectory: String,
+        serverExecutable: @escaping @Sendable (String) -> String? = { RemoteTmuxLocalServerBinary.executable(forSocket: $0) },
+        environmentOverrides: [String: String] = [:],
+        controlModeStartDeadline: Duration = .seconds(5)
+    ) {
         self.homeDirectory = homeDirectory
+        self.serverExecutable = serverExecutable
+        self.environmentOverrides = environmentOverrides
+        self.controlModeStartLimit = controlModeStartDeadline
     }
 
     func executablePath() -> String { Self.shellPath }

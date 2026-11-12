@@ -453,6 +453,33 @@ import Testing
         }
     }
 
+    /// tmux creates its `tmux-<uid>` directory on first use, so the socket's directory may not
+    /// exist yet. The nearest directory that does exist is checked instead, so an unsafe
+    /// `TMUX_TMPDIR` is refused before the CLI starts a server there.
+    @Test func aSocketDirectoryNotYetCreatedUnderADirectoryOthersCanWriteIsRefused() throws {
+        let directory = "/tmp/cmux-lt-n-\(UUID().uuidString.prefix(8))"
+        try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: directory) }
+        try #require(chmod(directory, 0o777) == 0)
+
+        #expect(throws: RemoteTmuxLocalServerSocket.Refusal.directoryNotPrivate(path: try Self.canonical(directory))) {
+            _ = try RemoteTmuxLocalServerSocket(validating: directory + "/tmux-501/default")
+        }
+    }
+
+    /// Under a private directory, a socket directory that does not exist yet is simply missing,
+    /// which the CLI reads as "no server" and starts one.
+    @Test func aSocketDirectoryNotYetCreatedInAPrivatePlaceIsMissing() throws {
+        let directory = "/tmp/cmux-lt-p-\(UUID().uuidString.prefix(8))"
+        try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: directory) }
+        try #require(chmod(directory, 0o700) == 0)
+
+        #expect(throws: RemoteTmuxLocalServerSocket.Refusal.missing(path: directory + "/tmux-501/default")) {
+            _ = try RemoteTmuxLocalServerSocket(validating: directory + "/tmux-501/default")
+        }
+    }
+
     @Test func boundaryRefusesASymlinkToSomethingThatIsNotASocket() throws {
         let socket = try TemporarySocket()
         defer { socket.cleanUp() }

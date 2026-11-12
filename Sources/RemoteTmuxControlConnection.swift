@@ -204,6 +204,12 @@ final class RemoteTmuxControlConnection {
     private var stdoutReader: FileHandle?
     private var stdoutPipeReader: RemoteTmuxProcessOutputReader?
     private var stderrPipeReader: RemoteTmuxProcessOutputReader?
+    #if DEBUG
+    /// The current spawn's output readers, so a test can wait for their descriptors to close.
+    var outputReadersForTesting: [RemoteTmuxProcessOutputReader] {
+        [stdoutPipeReader, stderrPipeReader].compactMap { $0 }
+    }
+    #endif
     /// Consumes the current spawn's stderr into `stderrBuffer`. Awaited before a
     /// failed reconnect attempt is classified, so the decision sees the complete
     /// error rather than racing the async stderr delivery.
@@ -309,6 +315,12 @@ final class RemoteTmuxControlConnection {
     /// result slot stolen by the attach block. Reset per spawn (each ssh re-attach
     /// produces a fresh attach block).
     private var attachBlockDrained = false
+    /// Why the connection ended before its client answered in control mode, when the
+    /// transport's own time limit (``RemoteTmuxTransportProfile/controlModeStartDeadline``)
+    /// stopped it. The attach reports this instead of a generic failure.
+    private(set) var startFailure: RemoteTmuxError?
+    /// The pending time limit on the current spawn's control-mode start, if the transport sets one.
+    var controlModeStartDeadlineTask: Task<Void, Never>?
     /// How the initial attach opens the session. Reconnects always use `.attach`; see
     /// ``spawnProcess(mode:)``.
     let attachMode: RemoteTmuxControlAttachMode

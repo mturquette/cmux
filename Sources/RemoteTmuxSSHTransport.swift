@@ -149,6 +149,10 @@ actor RemoteTmuxSSHTransport {
         }
     }
 
+    /// Makes sure the tmux client this transport will run is the build the running server runs.
+    /// Not implemented yet.
+    func assertClientMatchesServer() async throws {}
+
     private func assertSupportedTmuxVersion(_ version: RemoteTmuxVersion) throws {
         if !version.meetsMinimum {
             throw RemoteTmuxError.unsupportedTmux(detected: version.displayString)
@@ -204,9 +208,7 @@ actor RemoteTmuxSSHTransport {
         }
         let remoteCommand: String
         if remoteArgs.first == "tmux" {
-            remoteCommand = RemoteTmuxHost.tmuxRemoteCommand(
-                arguments: transportProfile.tmuxServerArguments(host: host) + remoteArgs.dropFirst()
-            )
+            remoteCommand = transportProfile.tmuxOneShotCommand(host: host, arguments: Array(remoteArgs.dropFirst()))
         } else {
             remoteCommand = remoteArgs
                 .map { RemoteTmuxHost.shellSingleQuoted($0) }
