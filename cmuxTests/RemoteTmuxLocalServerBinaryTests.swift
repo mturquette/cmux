@@ -64,6 +64,53 @@ import Testing
         #expect(RemoteTmuxLocalServerBinary.release(fromServerVersionOutput: " \n") == nil)
     }
 
+    /// The candidate names the file as well as the process, so a binary rebuilt in place at the
+    /// same path, after an attach checked it, is a new candidate and is checked again.
+    @Test func aCandidateNamesItsFileSoARebuildIsCheckedAgain() throws {
+        let socket = try ListeningSocket()
+        defer { socket.cleanUp() }
+        let candidate = try #require(RemoteTmuxLocalServerBinary().candidate(forSocket: socket.path))
+        #expect(candidate.file == RemoteTmuxServerBinaryCandidate.FileIdentity.of(path: candidate.path))
+        #expect(candidate.file.inode != 0)
+
+        let binary = socket.directory + "/tmux"
+        try Data("one".utf8).write(to: URL(fileURLWithPath: binary))
+        let before = try #require(RemoteTmuxServerBinaryCandidate.FileIdentity.of(path: binary))
+        // Rewritten in place with a later modification time, as a build might.
+        try Data("two".utf8).write(to: URL(fileURLWithPath: binary))
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date(timeIntervalSinceNow: 60)], ofItemAtPath: binary)
+        let rewritten = try #require(RemoteTmuxServerBinaryCandidate.FileIdentity.of(path: binary))
+        // Unlinked and copied, as `make install` does.
+        try FileManager.default.removeItem(atPath: binary)
+        try Data("three".utf8).write(to: URL(fileURLWithPath: binary))
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date(timeIntervalSinceNow: 120)], ofItemAtPath: binary)
+        let replaced = try #require(RemoteTmuxServerBinaryCandidate.FileIdentity.of(path: binary))
+
+        #expect(Set([before, rewritten, replaced]).count == 3)
+        let table = RemoteTmuxServerBinaryVerifications()
+        table.record(
+            RemoteTmuxServerBinaryCandidate(path: binary, processID: 7, startTime: 1, file: before),
+            matchesServer: true)
+        #expect(table.result(for: RemoteTmuxServerBinaryCandidate(
+            path: binary, processID: 7, startTime: 1, file: replaced)) == nil)
+    }
+
+    /// A full table drops its oldest entry, not every entry, so a recent check survives.
+    @Test func aFullTableDropsOnlyItsOldestEntry() {
+        let table = RemoteTmuxServerBinaryVerifications(capacity: 2)
+        let candidates = (1...3).map {
+            RemoteTmuxServerBinaryCandidate(path: "/t", processID: pid_t($0), startTime: 1)
+        }
+
+        for candidate in candidates { table.record(candidate, matchesServer: true) }
+
+        #expect(table.result(for: candidates[0]) == nil)
+        #expect(table.result(for: candidates[1]) == true)
+        #expect(table.result(for: candidates[2]) == true)
+    }
+
     /// A check is kept per server process, named by pid and start time, so a process that reuses
     /// the pid is checked again.
     @Test func aCheckBelongsToOneServerProcess() {
@@ -222,7 +269,7 @@ import Testing
 
         #expect(message.contains("3.2a") && message.contains("3.6a"))
         #expect(message.contains("/opt/homebrew/bin/tmux"))
-        #expect(message.contains("tmux -S /private/tmp/tmux-501/work kill-server"))
+        #expect(message.contains("tmux -S '/private/tmp/tmux-501/work' kill-server"))
         #expect(message.contains("closes every session"))
         #expect(!message.lowercased().contains("restart"))
         #expect(!message.lowercased().contains("ssh"))
@@ -231,7 +278,7 @@ import Testing
     /// The time-limit message says what happened and to try again, and nothing about ending the
     /// server, because nothing points at a mismatch.
     @Test func theTimeLimitMessageSaysOnlyWhatHappened() {
-        let message = RemoteTmuxError.localControlModeTimedOut(seconds: 5).message
+        let message = RemoteTmuxError.localControlModeTimedOut.message
 
         #expect(message.contains("5 seconds"))
         #expect(message.contains("try again"))

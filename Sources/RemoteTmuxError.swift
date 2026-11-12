@@ -70,7 +70,12 @@ enum RemoteTmuxError: Error, Sendable, Equatable {
 
     /// The local tmux control client started but did not answer in control mode within the
     /// transport's time limit, so cmux stopped it. The server and its sessions are untouched.
-    case localControlModeTimedOut(seconds: Int)
+    case localControlModeTimedOut
+
+    /// A working mirror lost its control client, and every reconnect attempt since then started a
+    /// client that never answered, up to the limit, so the connection ended rather than retry
+    /// without end. The server and its sessions are untouched.
+    case localReconnectGaveUp
 }
 
 extension RemoteTmuxError {
@@ -222,18 +227,24 @@ extension RemoteTmuxError {
             return String(
                 format: String(
                     localized: "remoteTmux.error.localVersionsDiffer",
-                    defaultValue: "the tmux server at %1$@ runs tmux %2$@, but its own tmux binary is gone, and the tmux cmux found, %3$@, is tmux %4$@. tmux cannot mirror across versions. To mirror this server, install tmux %2$@ in place of %3$@, or end the server with tmux -S %1$@ kill-server (this closes every session on it, with every program running in them) and start it again."
+                    defaultValue: "the tmux server at %1$@ runs tmux %2$@, but its own tmux binary is gone, and the tmux cmux found, %3$@, is tmux %4$@. tmux cannot mirror across versions. To mirror this server, install tmux %2$@ in place of %3$@, or end the server with tmux -S %5$@ kill-server (this closes every session on it, with every program running in them) and start it again."
                 ),
                 Self.sanitizedDetail(socketPath), Self.sanitizedDetail(server),
-                Self.sanitizedDetail(clientPath), Self.sanitizedDetail(client)
+                Self.sanitizedDetail(clientPath), Self.sanitizedDetail(client),
+                // Quoted for the shell, so the command can be copied as it stands.
+                RemoteTmuxHost.shellSingleQuoted(Self.sanitizedDetail(socketPath))
             )
-        case let .localControlModeTimedOut(seconds):
+        case .localControlModeTimedOut:
+            // The limit is fixed in the app (RemoteTmuxLocalTransportProfile.defaultControlModeStartLimit),
+            // so the text names it rather than formatting a count.
             return String(
-                format: String(
-                    localized: "remoteTmux.error.localControlModeTimedOut",
-                    defaultValue: "tmux on this Mac did not answer within %@ seconds, so cmux stopped its client. The session is still running; try again."
-                ),
-                String(seconds)
+                localized: "remoteTmux.error.localControlModeTimedOut",
+                defaultValue: "tmux on this Mac did not answer within 5 seconds, so cmux stopped its client. The session is still running; try again."
+            )
+        case .localReconnectGaveUp:
+            return String(
+                localized: "remoteTmux.error.localReconnectGaveUp",
+                defaultValue: "the mirror lost its connection to tmux on this Mac and stopped after 3 reconnect attempts that got no answer. The session is still running; mirror it again to retry."
             )
         }
     }

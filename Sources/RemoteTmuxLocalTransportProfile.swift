@@ -40,6 +40,9 @@ struct RemoteTmuxLocalTransportProfile: RemoteTmuxTransportProfile {
     /// tmux the resolver finds; the app passes none.
     let environmentOverrides: [String: String]
 
+    /// The time limit the app uses. `RemoteTmuxError.localControlModeTimedOut` names it in its text.
+    static let defaultControlModeStartLimit: Duration = .seconds(5)
+
     /// See ``controlModeStartDeadline``. Injected so a test can use a short limit.
     let controlModeStartLimit: Duration
 
@@ -50,7 +53,7 @@ struct RemoteTmuxLocalTransportProfile: RemoteTmuxTransportProfile {
         },
         verifications: RemoteTmuxServerBinaryVerifications = .shared,
         environmentOverrides: [String: String] = [:],
-        controlModeStartDeadline: Duration = .seconds(5)
+        controlModeStartDeadline: Duration = Self.defaultControlModeStartLimit
     ) {
         self.homeDirectory = homeDirectory
         self.serverCandidate = serverCandidate
@@ -135,7 +138,11 @@ struct RemoteTmuxLocalTransportProfile: RemoteTmuxTransportProfile {
     var controlModeStartDeadline: Duration? { controlModeStartLimit }
 
     func controlModeStartTimeoutError(host: RemoteTmuxHost) -> RemoteTmuxError {
-        .localControlModeTimedOut(seconds: Int(controlModeStartLimit.components.seconds))
+        .localControlModeTimedOut
+    }
+
+    func reconnectGaveUpError(host: RemoteTmuxHost) -> RemoteTmuxError {
+        .localReconnectGaveUp
     }
 
     /// `/bin/sh -c <command>`: the same resolver command ssh hands a remote shell, with the same

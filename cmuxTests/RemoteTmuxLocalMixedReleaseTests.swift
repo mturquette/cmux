@@ -91,8 +91,45 @@ struct RemoteTmuxLocalMixedReleaseTests {
 
         #expect(connected == false, "the hung client must end before the bound, not publish")
         #expect(ContinuousClock().now - start < .seconds(10))
-        #expect(connection.startFailure == .localControlModeTimedOut(seconds: 2))
+        #expect(connection.startFailure == .localControlModeTimedOut)
         #expect(connection.connectionState == .ended)
+    }
+
+    /// The mirror is working through the server's own 3.2a binary when `brew upgrade` deletes that
+    /// binary, and then its client dies while the server keeps running. The reconnect must not run
+    /// the 3.6a fallback, which would never answer: the same release check attach runs happens
+    /// first, and the connection ends with the refusal that names both releases.
+    @Test func aReconnectAfterTheServersBinaryIsGoneEndsWithTheReleaseRefusal() async throws {
+        let server = try TmuxServer(binary: Self.oldTmux, fromACopy: true)
+        defer { server.stop() }
+        let profile = server.profile(path: "\((Self.newTmux as NSString).deletingLastPathComponent):/usr/bin:/bin")
+        _ = try await server.transport(profile).discoverMirrorSessions(createIfEmpty: false)
+        let connection = RemoteTmuxControlConnection(host: server.host, sessionName: "main", transportProfile: profile)
+        try connection.start()
+        defer { connection.stop() }
+        let published = await Self.within(.seconds(10)) { await connection.waitUntilInitialTopology() }
+        try #require(published == true, "the 3.2a server did not mirror through its own binary")
+        let outcome = ExitOutcome()
+        let ended = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+            outcome.continuation = continuation
+            connection.addObserver(onExit: { outcome.finish(true) }, onConnectionStateChanged: { _ in })
+            do {
+                try server.deleteBinary()
+                try server.killClients()
+            } catch {
+                outcome.finish(false)
+                return
+            }
+            // A bound on the whole scenario, so a regression fails instead of stalling the suite.
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(40))
+                outcome.finish(false)
+            }
+        }
+
+        #expect(ended, "the connection kept retrying instead of ending")
+        #expect(connection.startFailure == .localTmuxVersionsDiffer(
+            server: "3.2a", client: "3.6a", clientPath: Self.newTmux, socketPath: server.socketPath))
     }
 
     // MARK: - Helpers
@@ -107,6 +144,7 @@ struct RemoteTmuxLocalMixedReleaseTests {
 
         init(
             binary: String,
+            fromACopy: Bool = false,
             deletingBinaryAfterStart: Bool = false,
             replacingBinaryAfterStartWith replacement: String? = nil
         ) throws {
@@ -115,7 +153,7 @@ struct RemoteTmuxLocalMixedReleaseTests {
             try #require(chmod(directory, 0o700) == 0)
             socketPath = try RemoteTmuxLocalMixedReleaseTests.canonical(directory) + "/s"
             var launched = binary
-            if deletingBinaryAfterStart || replacement != nil {
+            if fromACopy || deletingBinaryAfterStart || replacement != nil {
                 launched = directory + "/copy/tmux"
                 try FileManager.default.createDirectory(
                     atPath: directory + "/copy", withIntermediateDirectories: true)
@@ -161,6 +199,29 @@ struct RemoteTmuxLocalMixedReleaseTests {
             return await RemoteTmuxLocalMixedReleaseTests.within(.seconds(10)) {
                 await connection.waitUntilInitialTopology()
             } ?? false
+        }
+
+        /// Deletes the copy the server was started from, as `brew upgrade` does to a running
+        /// server's release.
+        func deleteBinary() throws {
+            try FileManager.default.removeItem(atPath: directory + "/copy")
+        }
+
+        /// Kills every client attached to the server, as a stalled or overflowing client is killed,
+        /// while the server keeps running.
+        func killClients() throws {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: killBinary)
+            process.arguments = ["-S", socketPath, "list-clients", "-F", "#{client_pid}"]
+            let output = Pipe()
+            process.standardOutput = output
+            process.standardError = FileHandle.nullDevice
+            try process.run()
+            process.waitUntilExit()
+            let text = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            let pids = text.split(whereSeparator: \.isNewline).compactMap { pid_t($0) }
+            try #require(!pids.isEmpty, "no client was attached to kill")
+            for pid in pids { kill(pid, SIGKILL) }
         }
 
         func stop() {
@@ -211,3 +272,14 @@ private let remoteTmuxNewRelease = "/opt/tmux/3.6a/bin/tmux"
 private let remoteTmuxMixedReleasesInstalled =
     FileManager.default.isExecutableFile(atPath: remoteTmuxOldRelease)
         && FileManager.default.isExecutableFile(atPath: remoteTmuxNewRelease)
+
+/// Whether a connection ended before the bound, resumed exactly once.
+@MainActor
+private final class ExitOutcome {
+    var continuation: CheckedContinuation<Bool, Never>?
+
+    func finish(_ ended: Bool) {
+        continuation?.resume(returning: ended)
+        continuation = nil
+    }
+}
