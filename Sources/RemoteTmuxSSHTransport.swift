@@ -100,16 +100,19 @@ actor RemoteTmuxSSHTransport {
     }
 
     /// Probes the running tmux server version via the server's `#{version}` format.
-    private func tmuxServerVersionProbe() async throws -> (serverExists: Bool, version: RemoteTmuxVersion?) {
+    private func tmuxServerVersionProbe() async throws -> (
+        serverExists: Bool, version: RemoteTmuxVersion?, release: String?
+    ) {
         let result = try await runTmux(["display-message", "-p", "#{version}"])
         guard result.succeeded else {
-            if Self.indicatesNoServer(result.stderr) { return (serverExists: false, version: nil) }
+            if Self.indicatesNoServer(result.stderr) { return (serverExists: false, version: nil, release: nil) }
             throw commandFailure(result)
         }
-        if let version = RemoteTmuxVersion.parseServerFormat(result.stdout) {
-            return (serverExists: true, version: version)
-        }
-        return (serverExists: true, version: nil)
+        return (
+            serverExists: true,
+            version: RemoteTmuxVersion.parseServerFormat(result.stdout),
+            release: RemoteTmuxLocalServerBinary.release(fromServerVersionOutput: result.stdout)
+        )
     }
 
     /// Probes the live-subscription capability directly when server version text
@@ -136,11 +139,13 @@ actor RemoteTmuxSSHTransport {
         if serverProbe.serverExists {
             guard let version = serverProbe.version else {
                 if try await serverSupportsRefreshClientSubscriptions() {
+                    try await assertClientMatchesServer(release: serverProbe.release)
                     return
                 }
                 throw RemoteTmuxError.unsupportedTmux(detected: RemoteTmuxError.unknownVersionDisplayName)
             }
             try assertSupportedTmuxVersion(version)
+            try await assertClientMatchesServer(release: serverProbe.release)
             return
         }
         guard checkClientWhenNoServer else { return }
@@ -149,9 +154,37 @@ actor RemoteTmuxSSHTransport {
         }
     }
 
-    /// Makes sure the tmux client this transport will run is the build the running server runs.
-    /// Not implemented yet.
-    func assertClientMatchesServer() async throws {}
+    /// Makes sure the tmux client this transport will run is the build the running server runs,
+    /// for a transport that compares them (``RemoteTmuxTransportProfile/clientVersionMismatchError(server:client:)``).
+    ///
+    /// Nothing runs for ssh and et. With no server running there is nothing to compare.
+    func assertClientMatchesServer() async throws {
+        guard comparesClientRelease else { return }
+        let serverProbe = try await tmuxServerVersionProbe()
+        guard serverProbe.serverExists else { return }
+        try await assertClientMatchesServer(release: serverProbe.release)
+    }
+
+    /// Whether this transport's profile compares the client's release with the server's.
+    private var comparesClientRelease: Bool {
+        transportProfile.clientVersionMismatchError(server: "", client: "") != nil
+    }
+
+    /// While the server's own binary exists it is the client, so it matches by construction.
+    /// Otherwise the client is the resolver's tmux, which must be exactly the server's release:
+    /// tmux 3.2a and 3.6a share protocol version 8, and control mode still fails between them.
+    private func assertClientMatchesServer(release server: String?) async throws {
+        guard comparesClientRelease, transportProfile.serverTmuxExecutable(host: host) == nil else { return }
+        // The resolver's tmux, which is what the control stream runs when the server's binary is gone.
+        let result = try await runRemoteCommand(RemoteTmuxHost.tmuxRemoteCommand(arguments: ["-V"]))
+        guard result.succeeded else { throw commandFailure(result) }
+        let client = RemoteTmuxLocalServerBinary.release(fromClientVersionOutput: result.stdout)
+        if let server, let client, server == client { return }
+        let unknown = RemoteTmuxError.unknownVersionDisplayName
+        if let refusal = transportProfile.clientVersionMismatchError(server: server ?? unknown, client: client ?? unknown) {
+            throw refusal
+        }
+    }
 
     private func assertSupportedTmuxVersion(_ version: RemoteTmuxVersion) throws {
         if !version.meetsMinimum {
@@ -202,10 +235,8 @@ actor RemoteTmuxSSHTransport {
     /// transport never builds an ssh command line itself.
     @discardableResult
     func run(_ remoteArgs: [String]) async throws -> RemoteTmuxCommandResult {
+        // Before the command is built: building it may look at the server behind the socket.
         if let refusal = transportProfile.refusalBeforeSpawn(host: host) { throw refusal }
-        if transportProfile.usesSharedControlMaster {
-            try host.ensureControlSocketDirectory()
-        }
         let remoteCommand: String
         if remoteArgs.first == "tmux" {
             remoteCommand = transportProfile.tmuxOneShotCommand(host: host, arguments: Array(remoteArgs.dropFirst()))
@@ -213,6 +244,17 @@ actor RemoteTmuxSSHTransport {
             remoteCommand = remoteArgs
                 .map { RemoteTmuxHost.shellSingleQuoted($0) }
                 .joined(separator: " ")
+        }
+        return try await runRemoteCommand(remoteCommand, socketChecked: true)
+    }
+
+    /// Runs one already-built remote command string the way the host's transport profile says.
+    private func runRemoteCommand(
+        _ remoteCommand: String, socketChecked: Bool = false
+    ) async throws -> RemoteTmuxCommandResult {
+        if !socketChecked, let refusal = transportProfile.refusalBeforeSpawn(host: host) { throw refusal }
+        if transportProfile.usesSharedControlMaster {
+            try host.ensureControlSocketDirectory()
         }
         let executable = oneShotExecutablePath
         let arguments = transportProfile.oneShotArgv(host: host, remoteCommand: remoteCommand)

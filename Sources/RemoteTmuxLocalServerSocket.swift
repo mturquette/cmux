@@ -101,7 +101,13 @@ struct RemoteTmuxLocalServerSocket: Sendable, Equatable {
         // listens there yet. Otherwise the CLI would read "missing" as "no server" and start one
         // in a directory another user can tamper with.
         let rawDirectory = (rawPath as NSString).deletingLastPathComponent
-        guard let directory = Self.realPath(rawDirectory) else { throw Refusal.missing(path: rawPath) }
+        guard let directory = Self.realPath(rawDirectory) else {
+            // tmux creates `tmux-<uid>` on first use, so the directory may not exist yet. The
+            // nearest one that does is where tmux will create it, and it gets the same check, so
+            // an unsafe TMUX_TMPDIR is refused before a server is started there.
+            try Self.requirePrivateAncestors(of: Self.nearestExistingAncestor(of: rawDirectory), userID: userID)
+            throw Refusal.missing(path: rawPath)
+        }
         try Self.requirePrivateAncestors(of: directory, userID: userID)
         // realpath fails with ENOENT for a missing socket or a dangling link, and resolves every
         // symlink otherwise, so the ownership check below is made on the file tmux will open.
@@ -146,6 +152,17 @@ struct RemoteTmuxLocalServerSocket: Sendable, Equatable {
         let writableByOthers = status.st_mode & (S_IWGRP | S_IWOTH) != 0
         let sticky = status.st_mode & S_ISVTX != 0
         return !writableByOthers || sticky
+    }
+
+    /// The canonical form of the closest directory at or above `path` that exists; `/` at worst.
+    private static func nearestExistingAncestor(of path: String) -> String {
+        var current = path
+        while true {
+            if let resolved = realPath(current) { return resolved }
+            let parent = (current as NSString).deletingLastPathComponent
+            if parent == current || parent.isEmpty { return "/" }
+            current = parent
+        }
     }
 
     /// The canonical form of `path`, or nil when it does not exist.

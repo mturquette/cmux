@@ -71,14 +71,43 @@ struct RemoteTmuxLocalTransportProfile: RemoteTmuxTransportProfile {
         sessionName: String,
         mode: RemoteTmuxControlAttachMode
     ) -> [String] {
+        let tmuxArguments = tmuxServerArguments(host: host) + mode.tmuxArguments(sessionName: sessionName)
+        // The server's own binary, passed as `$0` so no path is ever parsed by the shell.
+        if let binary = serverTmuxExecutable(host: host) {
+            return ["-c", Self.execScript, binary] + tmuxArguments
+        }
         // The resolver's argv starts with `/bin/sh`, which is the executable, not an argument.
-        Array(
-            RemoteTmuxCommandBuilder(
-                arguments: tmuxServerArguments(host: host) + mode.tmuxArguments(sessionName: sessionName)
-            )
-            .remoteCommandArguments
-            .dropFirst()
-        )
+        return Array(RemoteTmuxCommandBuilder(arguments: tmuxArguments).remoteCommandArguments.dropFirst())
+    }
+
+    /// Runs `$0` with the remaining arguments, unchanged.
+    static let execScript = "exec \"$0\" \"$@\""
+
+    /// The running server's own binary; see ``RemoteTmuxLocalServerBinary``.
+    func serverTmuxExecutable(host: RemoteTmuxHost) -> String? {
+        guard let socket = host.serverSocketPath else { return nil }
+        return serverExecutable(socket)
+    }
+
+    /// The server's own binary when it exists, otherwise the same resolver ssh uses.
+    func tmuxOneShotCommand(host: RemoteTmuxHost, arguments: [String]) -> String {
+        let tmuxArguments = tmuxServerArguments(host: host) + arguments
+        guard let binary = serverTmuxExecutable(host: host) else {
+            return RemoteTmuxHost.tmuxRemoteCommand(arguments: tmuxArguments)
+        }
+        return "exec " + ([binary] + tmuxArguments).map(RemoteTmuxHost.shellSingleQuoted).joined(separator: " ")
+    }
+
+    func clientVersionMismatchError(server: String, client: String) -> RemoteTmuxError? {
+        .localTmuxVersionsDiffer(server: server, client: client)
+    }
+
+    /// A local client answers its attach in milliseconds, so five seconds is generous, and short
+    /// enough that the CLI's own deadline never runs out first.
+    var controlModeStartDeadline: Duration? { controlModeStartLimit }
+
+    func controlModeStartTimeoutError(host: RemoteTmuxHost) -> RemoteTmuxError {
+        .localControlModeTimedOut
     }
 
     /// `/bin/sh -c <command>`: the same resolver command ssh hands a remote shell, with the same
@@ -90,11 +119,12 @@ struct RemoteTmuxLocalTransportProfile: RemoteTmuxTransportProfile {
     func oneShotExecutablePath() -> String { Self.shellPath }
 
     func oneShotEnvironment(inheriting base: [String: String]) -> [String: String]? {
-        base.filter { !Self.strippedEnvironmentKeys.contains($0.key) }
+        childProcessEnvironment(inheriting: base)
     }
 
     func childProcessEnvironment(inheriting base: [String: String]) -> [String: String] {
         base.filter { !Self.strippedEnvironmentKeys.contains($0.key) }
+            .merging(environmentOverrides) { _, override in override }
     }
 
     /// No ssh, so no master to open, check or close.

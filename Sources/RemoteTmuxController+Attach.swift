@@ -63,6 +63,9 @@ extension RemoteTmuxController {
         let sessions: [RemoteTmuxSession]
         do {
             if let sessionName {
+                // Discovery below checks this for the whole-server path; a named session skips
+                // discovery, so the local client's release is checked here. A no-op for ssh and et.
+                try await transport(for: host).assertClientMatchesServer()
                 let discovered = try await transport(for: host).listSessions()
                 guard discovered.contains(where: { $0.name == sessionName }) else {
                     throw RemoteTmuxError.unreachable(
@@ -154,6 +157,7 @@ extension RemoteTmuxController {
             if windowTarget == .dedicatedNewWindow {
                 appDelegate.discardMainWindowWithoutClosedHistory(windowId: resolvedWindowId)
             }
+            if let startFailure = readiness.startFailure { throw startFailure }
             throw Self.mirrorFailure(
                 destination: host.destination, awaitingCredentials: readiness.awaitingCredentials)
         }
@@ -227,6 +231,9 @@ extension RemoteTmuxController {
     struct MirrorReadiness {
         let readyWorkspaceIds: [UUID]
         let awaitingCredentials: Bool
+        /// Why a mirror that did not publish ended, when its transport said so (a control client
+        /// that missed the transport's start time limit).
+        var startFailure: RemoteTmuxError? = nil
     }
 
     /// The single place that decides what a host with nothing mirrored should say.
@@ -330,6 +337,7 @@ extension RemoteTmuxController {
         }
 
         var awaitingCredentials = false
+        var startFailure: RemoteTmuxError?
         for entry in pending {
             if published[entry.workspaceId] == true {
                 ready.append(entry.workspaceId)
@@ -337,6 +345,7 @@ extension RemoteTmuxController {
                 // Ask before detaching. This is the only moment the connection that saw the prompt is
                 // still around to be asked; the caller decides what to report long after it is gone.
                 if entry.connection.isAwaitingCredentials { awaitingCredentials = true }
+                startFailure = startFailure ?? entry.connection.startFailure
                 #if DEBUG
                 cmuxDebugLog(
                     "remote-tmux: mirror for \(entry.connection.sessionName) published no topology; dropping it")
@@ -347,7 +356,8 @@ extension RemoteTmuxController {
                 }
             }
         }
-        return MirrorReadiness(readyWorkspaceIds: ready, awaitingCredentials: awaitingCredentials)
+        return MirrorReadiness(
+            readyWorkspaceIds: ready, awaitingCredentials: awaitingCredentials, startFailure: startFailure)
     }
 
     func cleanUpTransportAfterFailedMirror(host: RemoteTmuxHost) {

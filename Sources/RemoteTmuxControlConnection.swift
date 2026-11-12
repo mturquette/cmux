@@ -880,6 +880,7 @@ final class RemoteTmuxControlConnection {
         self.stderrPipeReader = stderrPipeReader
         processGeneration &+= 1
         let generation = processGeneration
+        armControlModeStartDeadline(generation: generation)
         stderrTask = Task { [weak self] in
             for await chunk in stderrPipeReader.stream {
                 if let text = String(data: chunk, encoding: .utf8), !text.isEmpty {
@@ -902,6 +903,36 @@ final class RemoteTmuxControlConnection {
             }
             guard !Task.isCancelled else { return }
             await self?.handleStreamEnd(processGeneration: generation)
+        }
+    }
+
+    /// Starts the transport's time limit on this spawn reaching control mode, if it sets one.
+    ///
+    /// A deadline, not a poll: one sleep per spawn, withdrawn when the attach block arrives or the
+    /// spawn is torn down. It ends the connection only if this same spawn is still waiting for its
+    /// attach block, which is what a tmux client of another release does against a server: it
+    /// starts, prints nothing, and never exits. Without it, the attach waits for the caller's far
+    /// longer deadline and then reports a generic failure.
+    private func armControlModeStartDeadline(generation: UInt64) {
+        controlModeStartDeadlineTask?.cancel()
+        controlModeStartDeadlineTask = nil
+        guard let deadline = transportProfile.controlModeStartDeadline else { return }
+        controlModeStartDeadlineTask = Task { @MainActor [weak self] in
+            do {
+                try await ContinuousClock().sleep(for: deadline)
+            } catch {
+                return
+            }
+            guard let self, self.processGeneration == generation, !self.attachBlockDrained,
+                  self.connectionState != .ended
+            else { return }
+            self.record("control-mode-start-timeout")
+            self.startFailure = self.transportProfile.controlModeStartTimeoutError(host: self.host)
+            self.controlModeStartDeadlineTask = nil
+            self.connectionState = .ended
+            self.cancelScheduledWork()
+            self.teardownProcessHandles()
+            self.observers.notifyExit()
         }
     }
 
@@ -1132,6 +1163,8 @@ final class RemoteTmuxControlConnection {
     /// (reconnect) from a clean slate.
     private func teardownProcessHandles() {
         processGeneration &+= 1
+        controlModeStartDeadlineTask?.cancel()
+        controlModeStartDeadlineTask = nil
         ingestTask?.cancel()
         ingestTask = nil
         stderrTask?.cancel()
@@ -1868,6 +1901,9 @@ final class RemoteTmuxControlConnection {
             // the positional FIFO (see ``attachBlockDrained``).
             if !attachBlockDrained {
                 attachBlockDrained = true
+                // The client answered in control mode, so the start time limit has done its job.
+                controlModeStartDeadlineTask?.cancel()
+                controlModeStartDeadlineTask = nil
                 requestWindowsAndSubscribeAfterAttach()
             } else {
                 handleCommandResult(lines: lines, isError: isError)
