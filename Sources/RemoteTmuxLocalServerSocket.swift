@@ -96,35 +96,75 @@ struct RemoteTmuxLocalServerSocket: Sendable, Equatable {
     /// - Throws: ``Refusal`` naming the first check that failed.
     init(validating rawPath: String, userID: uid_t = getuid()) throws {
         guard rawPath.hasPrefix("/") else { throw Refusal.notAbsolute }
-        guard !RemoteTmuxBrokerRegistry.hasHiddenCharacter(rawPath) else { throw Refusal.hiddenCharacter }
+        guard !Self.hasHiddenCharacter(rawPath) else { throw Refusal.hiddenCharacter }
+        // The directories come first, so an unsafe place is reported as unsafe even when nothing
+        // listens there yet. Otherwise the CLI would read "missing" as "no server" and start one
+        // in a directory another user can tamper with.
+        let rawDirectory = (rawPath as NSString).deletingLastPathComponent
+        guard let directory = Self.realPath(rawDirectory) else { throw Refusal.missing(path: rawPath) }
+        try Self.requirePrivateAncestors(of: directory, userID: userID)
         // realpath fails with ENOENT for a missing socket or a dangling link, and resolves every
         // symlink otherwise, so the ownership check below is made on the file tmux will open.
-        guard let resolved = realpath(rawPath, nil) else { throw Refusal.missing(path: rawPath) }
-        let canonical = String(cString: resolved)
-        free(resolved)
+        guard let canonical = Self.realPath(rawPath) else { throw Refusal.missing(path: rawPath) }
+        let canonicalDirectory = (canonical as NSString).deletingLastPathComponent
+        if canonicalDirectory != directory {
+            // A symlinked socket resolves into another directory, which gets the same check.
+            try Self.requirePrivateAncestors(of: canonicalDirectory, userID: userID)
+        }
         var status = stat()
         guard lstat(canonical, &status) == 0 else { throw Refusal.missing(path: rawPath) }
         guard status.st_mode & S_IFMT == S_IFSOCK else { throw Refusal.notASocket(path: canonical) }
         guard status.st_uid == userID else { throw Refusal.notOwnedByUser(path: canonical) }
-        // The ownership check above is only as good as the directory around the socket: anyone who
-        // can write there can rename their own socket into place after it. tmux applies the same
-        // rule to its own socket directory.
-        let directory = (canonical as NSString).deletingLastPathComponent
-        var directoryStatus = stat()
-        guard stat(directory, &directoryStatus) == 0,
-              Self.isPrivateDirectory(directoryStatus, userID: userID)
-        else { throw Refusal.directoryNotPrivate(path: directory) }
         path = canonical
+    }
+
+    /// Refuses `directory` or any directory above it that another user could rearrange.
+    ///
+    /// The socket's own ownership is only as good as every directory on its path: anyone who can
+    /// write to an ancestor can rename the user's directory aside and put their own in its place,
+    /// without any permission on the user's directory itself. tmux applies the same rule to its own
+    /// socket directory.
+    static func requirePrivateAncestors(of directory: String, userID: uid_t) throws {
+        var current = directory
+        while true {
+            var status = stat()
+            guard stat(current, &status) == 0, isPrivateDirectory(status, userID: userID) else {
+                throw Refusal.directoryNotPrivate(path: current)
+            }
+            if current == "/" || current.isEmpty { return }
+            current = (current as NSString).deletingLastPathComponent
+        }
     }
 
     /// Whether only `userID` (or root) can replace entries in a directory with this status.
     ///
-    /// The user's own directory may be group- or world-writable only if it is sticky, and the same
-    /// holds for a root-owned one such as `/private/tmp`. Any other owner is refused.
+    /// A directory others can write to passes only when it is sticky, as `/private/tmp` is, because
+    /// the sticky bit stops them renaming or removing entries they do not own. Any owner other than
+    /// the user or root is refused.
     static func isPrivateDirectory(_ status: stat, userID: uid_t) -> Bool {
         guard status.st_uid == userID || status.st_uid == 0 else { return false }
         let writableByOthers = status.st_mode & (S_IWGRP | S_IWOTH) != 0
         let sticky = status.st_mode & S_ISVTX != 0
         return !writableByOthers || sticky
+    }
+
+    /// The canonical form of `path`, or nil when it does not exist.
+    private static func realPath(_ path: String) -> String? {
+        guard let resolved = realpath(path, nil) else { return nil }
+        defer { free(resolved) }
+        return String(cString: resolved)
+    }
+
+    /// Control, format and separator scalars, which no socket path should contain. Kept here, not
+    /// shared, so the CLI can compile this type on its own.
+    static func hasHiddenCharacter(_ value: String) -> Bool {
+        value.unicodeScalars.contains { scalar in
+            if scalar.properties.isDefaultIgnorableCodePoint { return true }
+            if scalar.value < 0x20 || scalar.value == 0x7f { return true }
+            switch scalar.properties.generalCategory {
+            case .control, .format, .lineSeparator, .paragraphSeparator: return true
+            default: return false
+            }
+        }
     }
 }

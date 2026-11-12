@@ -69,16 +69,21 @@ extension CMUXCLI {
     /// Whether no tmux server is running at `socketPath`, as the app sees it.
     ///
     /// The app answers first, so a disabled feature or a refused path stops the command before it
-    /// creates anything. A socket that does not exist yet is refused by the app as missing, and
-    /// that, alone among refusals, means "no server".
+    /// creates anything. When the app refuses the path, the CLI runs the same check the app runs
+    /// (``RemoteTmuxLocalServerSocket``, compiled into both): only "the socket does not exist",
+    /// which it reports after every directory on the path has passed, means "no server". An
+    /// unsafe directory, a file that is not a socket, or another user's socket is refused as is.
     func tmuxMirrorServerIsMissing(params: [String: Any], socketPath: String, client: SocketClient) throws -> Bool {
         do {
             let result = try client.sendV2(method: "remote.tmux.sessions", params: params, waitUntilCompletion: true)
             return ((result["sessions"] as? [Any]) ?? []).isEmpty
         } catch let error as CLIError where error.v2Code == "invalid_params" {
-            var status = stat()
-            guard lstat(socketPath, &status) != 0, errno == ENOENT else { throw error }
-            return true
+            do {
+                _ = try RemoteTmuxLocalServerSocket(validating: socketPath)
+            } catch RemoteTmuxLocalServerSocket.Refusal.missing {
+                return true
+            } catch {}
+            throw error
         }
     }
 
