@@ -1406,11 +1406,22 @@ print(panes[0].get("surface_id", "") if panes else "")
     fail "no surface found for the mirrored pane"
   else
     # The drop RPC resolves surfaces only in the selected workspace of the
-    # active window (Q-A11), and the mirror was attached without focus, so
-    # select its workspace first. Track B's T8 does the same.
-    local first; first="$(printf '%s\n' $ids | head -1)"
-    run_bounded 10 cli workspace select --workspace "$first"
-    printf 'select(%s): %s\n' "$RB_STATUS" "$RB_OUT" > "$ARTIFACTS/A23.txt"
+    # active window (Q-A11), and the mirror was attached without focus. As in
+    # track B's T8 (c7a67052986): select the mirror's workspace with
+    # workspace.select, and put the previous selection back afterwards.
+    local first previous
+    first="$(printf '%s\n' $ids | head -1)"
+    previous="$(rpc workspace.current '{}' 2>/dev/null | python3 -I -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+d = d.get("result", d)
+print(d.get("workspace_id") or "")
+')"
+    run_bounded 10 rpc workspace.select "{\"workspace_id\":\"$first\"}"
+    printf 'previous=%s select(%s): %s\n' "$previous" "$RB_STATUS" "$RB_OUT" > "$ARTIFACTS/A23.txt"
     local image="$ADV_TMP_ROOT/a23 paste me.png"
     python3 -I -c 'import base64, sys; open(sys.argv[1], "wb").write(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="))' "$image"
     local params
@@ -1419,13 +1430,30 @@ print(panes[0].get("surface_id", "") if panes else "")
     printf 'drop(%s): %s\n' "$RB_STATUS" "$RB_OUT" >> "$ARTIFACTS/A23.txt"
     printf '%s' "$RB_OUT" | grep -qi 'not.found' \
       && fail "the drop RPC still could not find the mirror pane's surface after selecting its workspace: $RB_OUT"
-    sleep 4
-    t "$sock" capture-pane -p -J -t main > "$ARTIFACTS/A23-pane.txt" 2>/dev/null
+    # R8 asks for a local file path. The app may insert a local copy of the
+    # image (for example under $TMPDIR as clipboard-*.png) rather than the
+    # dropped path, so, as T8 does, accept any image path in the pane that
+    # names an existing local file.
+    local found="" i=0
+    while [ "$i" -lt 50 ] && [ -z "$found" ]; do
+      t "$sock" capture-pane -p -J -t main > "$ARTIFACTS/A23-pane.txt" 2>/dev/null
+      found="$(python3 -I -c '
+import os, re, sys
+text = open(sys.argv[1], errors="replace").read()
+pattern = re.compile(r"(/(?:[^\s\x27\"\\]|\\.)+\.(?:png|jpe?g|tiff?|heic|gif))", re.IGNORECASE)
+for match in pattern.findall(text):
+    path = match.replace("\\", "")
+    if os.path.isfile(path):
+        print(path)
+        break
+' "$ARTIFACTS/A23-pane.txt")"
+      sleep 0.2; i=$((i + 1))
+    done
     [ ! -s "$calls" ] && pass "no ssh, scp or sftp ran for the paste" \
       || fail "the paste ran ssh tools on a local mirror: $(tr '\n' ';' < "$calls")"
-    grep -q 'paste' "$ARTIFACTS/A23-pane.txt" && grep -q 'me\.png' "$ARTIFACTS/A23-pane.txt" \
-      && pass "the pane received the image's local path (R8)" \
-      || fail "the pane did not receive the local path (drop reply: $RB_OUT)"
+    [ -n "$found" ] && pass "the pane received a local image path (R8): $found" \
+      || fail "the pane received no existing local image path within 10 s (drop reply: $RB_OUT; pane: $(grep -v '^[[:space:]]*$' "$ARTIFACTS/A23-pane.txt" | tr '\n' ';' | head -c 300))"
+    [ -n "$previous" ] && [ "$previous" != "$first" ] && rpc workspace.select "{\"workspace_id\":\"$previous\"}" >/dev/null 2>&1
   fi
   local w; for w in $ids; do close_workspace "$w"; done
   t "$sock" kill-server 2>/dev/null
