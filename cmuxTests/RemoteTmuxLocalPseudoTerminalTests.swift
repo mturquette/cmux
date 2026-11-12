@@ -141,7 +141,8 @@ import Testing
 
     /// A control connection whose transport owns its pty gives the client a terminal on stdin and
     /// stdout and keeps stderr a pipe, so tmux control mode starts and failure text stays readable.
-    /// The fake client reports through a FIFO, which the test reads to end-of-file: an edge, not a
+    /// The fake client tests its descriptors before redirecting anything, then reports through a
+    /// FIFO, which the test reads to end-of-file: an edge, not a
     /// poll.
     @MainActor
     @Test func aConnectionOnTheOwnedPtyGivesTheClientATerminalAndKeepsStderrAPipe() async throws {
@@ -153,7 +154,11 @@ import Testing
         let client = directory + "/client"
         let script = """
         #!/bin/sh
-        { [ -t 0 ] && echo stdin-tty; [ -t 1 ] && echo stdout-tty; [ -t 2 ] || echo stderr-pipe; } > '\(report)'
+        r=""
+        [ -t 0 ] && r="${r}stdin-tty "
+        [ -t 1 ] && r="${r}stdout-tty "
+        [ -t 2 ] || r="${r}stderr-pipe "
+        printf '%s' "$r" > '\(report)'
         exec sleep 30
         """
         try script.write(toFile: client, atomically: true, encoding: .utf8)
@@ -176,7 +181,7 @@ import Testing
         defer { connection.stop() }
 
         let reported = await reading.value
-        #expect(reported == "stdin-tty\nstdout-tty\nstderr-pipe\n", "the client reported \(reported.debugDescription)")
+        #expect(reported == "stdin-tty stdout-tty stderr-pipe ", "the client reported \(reported.debugDescription)")
     }
 
     // MARK: - Helpers
