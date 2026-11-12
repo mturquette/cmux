@@ -115,13 +115,13 @@ extension RemoteTmuxController {
         let requestedName = "cmux-new-\(UUID().uuidString.lowercased().prefix(12))"
         let name: String
         do {
-            let result = try await transport(for: host).runTmux(
-                [
-                    "new-session", "-d", "-s", requestedName,
-                    "-x", "\(RemoteTmuxViewConnection.defaultInitialCols)",
-                    "-y", "\(RemoteTmuxViewConnection.defaultInitialRows)",
-                    "-P", "-F", "#{session_name}",
-                ]
+            let sessionTransport = transport(for: host)
+            let result = try await sessionTransport.runTmux(
+                sessionTransport.detachedSessionArguments(
+                    name: requestedName,
+                    columns: RemoteTmuxViewConnection.defaultInitialCols,
+                    rows: RemoteTmuxViewConnection.defaultInitialRows
+                )
             )
             let created = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
             // A closed window no longer has a requester who can pick up this

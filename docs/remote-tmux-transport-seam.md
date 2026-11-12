@@ -324,7 +324,7 @@ the parser, the mirrors or the reconnect rules:
   sends a remote shell, so Homebrew and MacPorts tmux are found from a GUI app's PATH.
   `usesSharedControlMaster` is false, which turns the ControlMaster steps into no-ops.
 - **An owned pty.** tmux control mode needs a terminal, so the client runs on a pty cmux
-  allocates itself (`RemoteTmuxLocalPseudoTerminal`, chosen by `ownsPseudoTerminal`). When
+  allocates itself (`RemoteTmuxLocalPseudoTerminal`, chosen by `pseudoTerminal == .owned`). When
   cmux dies the master closes and tmux drops the client at once; under `script(1)` it stayed
   attached until the pane next printed. All three descriptors are close-on-exec, and stderr
   stays a pipe so failure classification is unchanged.

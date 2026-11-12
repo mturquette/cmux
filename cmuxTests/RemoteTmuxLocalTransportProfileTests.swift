@@ -28,7 +28,9 @@ import Testing
         let profile = RemoteTmuxHost.local(serverSocketPath: "/tmp/cmux-lt-absent/default").transportProfile
         #expect(profile is RemoteTmuxLocalTransportProfile)
         #expect(profile.requiresPseudoTerminal)
-        #expect(profile.ownsPseudoTerminal)
+        #expect(profile.pseudoTerminal == .owned)
+        #expect(RemoteTmuxHost(destination: "box", transport: .et).transportProfile.pseudoTerminal == .scriptWrapper)
+        #expect(RemoteTmuxHost(destination: "user@host").transportProfile.pseudoTerminal == .none)
         #expect(!profile.usesSharedControlMaster)
         #expect(!profile.remoteHalfSurvivesLocalExit)
         #expect(!profile.authenticationIsSSHShaped)
@@ -93,7 +95,7 @@ import Testing
         ]
 
         for environment in [
-            profile.oneShotEnvironment(inheriting: decoy),
+            profile.oneShotEnvironment(inheriting: decoy) ?? [:],
             profile.childProcessEnvironment(inheriting: decoy),
         ] {
             #expect(environment["TMUX"] == nil)
@@ -113,7 +115,7 @@ import Testing
         #expect(RemoteTmuxSSHTransportProfile().appCreatedSessionArguments().isEmpty)
     }
 
-    // MARK: Failure wording (R6)
+    // MARK: Failure wording
 
     @Test func missingTmuxIsReportedForThisMacWithoutSSH() async throws {
         let fake = try FakeShell(body: "printf '%s\\n' '\(RemoteTmuxHost.tmuxNotFoundSentinel)' >&2; exit 127")
@@ -123,7 +125,8 @@ import Testing
             sshExecutablePath: fake.path
         )
 
-        await #expect(throws: RemoteTmuxError.localTmuxNotFound) { _ = try await transport.listSessions() }
+        let error = await #expect(throws: RemoteTmuxError.self) { _ = try await transport.listSessions() }
+        #expect(error.map { transport.transportProfile.presentableError($0) } == .localTmuxNotFound)
         #expect(!RemoteTmuxError.localTmuxNotFound.message.lowercased().contains("ssh"))
     }
 
@@ -141,16 +144,17 @@ import Testing
             sshExecutablePath: fake.path
         )
 
-        await #expect(throws: RemoteTmuxError.localTmuxUnsupported(detected: "3.1")) {
+        let refused = await #expect(throws: RemoteTmuxError.self) {
             try await transport.assertMinimumTmuxVersion(checkClientWhenNoServer: true)
         }
+        #expect(refused.map { transport.transportProfile.presentableError($0) } == .localTmuxUnsupported(detected: "3.1"))
         let message = RemoteTmuxError.localTmuxUnsupported(detected: "3.1").message
         #expect(message.contains("3.1"))
         #expect(!message.lowercased().contains("ssh"))
         #expect(!RemoteTmuxError.localLaunchFailed("openpty").message.lowercased().contains("ssh"))
     }
 
-    /// R6 and D7: with no server running, the app refuses with its own message instead of
+    /// With no server running, the app refuses with its own message instead of
     /// starting a server whose first session would miss the user's environment.
     @Test func mirroringAnEmptyLocalServerIsRefusedAndStartsNothing() async throws {
         let log = NSTemporaryDirectory() + "remote-tmux-local-calls-\(UUID().uuidString).log"
@@ -178,7 +182,7 @@ import Testing
         #expect(!message.lowercased().contains("ssh"))
     }
 
-    /// R20 and A16: the socket is checked again before every spawn, not only at the boundary.
+    /// The socket is checked again before every spawn, not only at the boundary.
     @Test func aSocketThatChangedHandsIsRefusedBeforeAnyCommandRuns() async throws {
         let socket = try TemporarySocket()
         defer { socket.cleanUp() }
@@ -204,39 +208,97 @@ import Testing
         #expect(host.transportProfile.refusalBeforeSpawn(host: host) == nil)
     }
 
-    /// A15: a tmux command against a stopped server ends at the deadline, and its process with it.
+    /// A tmux command against a stopped server ends at the deadline, and its process with it. The
+    /// deadline is injected, so the test takes a fraction of a second.
     @Test func aLocalCommandThatNeverAnswersEndsAtTheDeadline() async throws {
         let pidFile = NSTemporaryDirectory() + "remote-tmux-local-hang-\(UUID().uuidString).pid"
         defer { try? FileManager.default.removeItem(atPath: pidFile) }
         let fake = try FakeShell(body: "echo $$ > '\(pidFile)'; exec sleep 600")
         defer { fake.cleanUp() }
         let host = RemoteTmuxHost.local(serverSocketPath: "/tmp/cmux-lt-absent/default")
-        let transport = RemoteTmuxSSHTransport(host: host, sshExecutablePath: fake.path)
+        let transport = RemoteTmuxSSHTransport(
+            host: host,
+            sshExecutablePath: fake.path,
+            oneShotDeadline: .milliseconds(200)
+        )
         let start = ContinuousClock().now
 
         await #expect(throws: RemoteTmuxError.localTmuxTimedOut(socketPath: "/tmp/cmux-lt-absent/default")) {
             _ = try await transport.runTmux(["list-sessions"])
         }
 
-        #expect(ContinuousClock().now - start < .seconds(20))
+        #expect(ContinuousClock().now - start < .seconds(5))
+        // The call returns only after the process's termination handler ran, so the child has been
+        // reaped by then and its pid no longer names a process.
         let pid = try #require(Int32((try? String(contentsOfFile: pidFile, encoding: .utf8))?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""))
-        // Foundation reaps the killed child on its own queue, so give it a moment to disappear.
-        var alive = true
-        for _ in 0..<40 where alive {
-            alive = kill(pid, 0) == 0
-            if alive { try await Task.sleep(for: .milliseconds(50)) }
-        }
-        #expect(!alive, "the hung command's process must not outlive the deadline")
+        #expect(kill(pid, 0) != 0, "the hung command's process must not outlive the deadline")
         #expect(!RemoteTmuxError.localTmuxTimedOut(socketPath: "/s").message.lowercased().contains("ssh"))
     }
 
-    @Test func onlyTheLocalTransportAnnouncesAnEndedMirror() {
-        #expect(RemoteTmuxHost.local(serverSocketPath: "/tmp/x").transportProfile.announcesEndedMirror)
-        #expect(!RemoteTmuxHost(destination: "user@host").transportProfile.announcesEndedMirror)
-        #expect(!RemoteTmuxHost(destination: "box", transport: .et).transportProfile.announcesEndedMirror)
+    /// A local mirror pane is on this Mac, so a pasted image goes in as its local path, while
+    /// ssh and et panes still upload it first.
+    @Test func onlyRemoteTransportsUploadPastedFiles() {
+        #expect(!RemoteTmuxHost.local(serverSocketPath: "/tmp/cmux-lt-absent/default").transportProfile
+            .pastedFilesNeedUpload)
+        #expect(RemoteTmuxHost(destination: "user@host").transportProfile.pastedFilesNeedUpload)
+        #expect(RemoteTmuxHost(destination: "box", transport: .et).transportProfile.pastedFilesNeedUpload)
+    }
+
+    /// The notice appears only when the server itself has stopped, and says exactly that. A session
+    /// that ends while its server keeps listening gets none, as for ssh-tmux.
+    @Test func aStoppedServerIsAnnouncedButALiveOneIsNot() throws {
+        let socket = try TemporarySocket()
+        defer { socket.cleanUp() }
+        let live = RemoteTmuxHost.local(serverSocketPath: socket.canonicalPath)
+        try #require(listen(socket.descriptorForListening, 1) == 0)
+        #expect(live.transportProfile.stoppedServerNotice(host: live)?.title == nil)
+
+        let stopped = RemoteTmuxHost.local(serverSocketPath: socket.directory + "/gone")
+        let notice = try #require(stopped.transportProfile.stoppedServerNotice(host: stopped))
+        #expect(notice.body.contains(socket.directory + "/gone"))
+        #expect(!notice.body.lowercased().contains("ssh"))
+
+        #expect(RemoteTmuxHost(destination: "user@host").transportProfile.stoppedServerNotice(
+            host: RemoteTmuxHost(destination: "user@host"))?.title == nil)
         #expect(RemoteTmuxHost(destination: "user@host").transportProfile.emptyServerRefusal(
             host: RemoteTmuxHost(destination: "user@host")) == nil)
+    }
+
+    /// A UI-created session on a local server starts in the home directory, with formats kept
+    /// literal, and an ssh one keeps tmux's own default.
+    @Test func uiCreatedSessionsStartInHomeOnALocalServer() {
+        let local = RemoteTmuxSSHTransport(
+            host: RemoteTmuxHost.local(serverSocketPath: "/tmp/cmux-lt-absent/default"),
+            transportProfile: RemoteTmuxLocalTransportProfile(homeDirectory: "/Users/me #1")
+        )
+        let argv = local.detachedSessionArguments(name: "cmux-new-x", columns: 120, rows: 40)
+        #expect(argv == ["new-session", "-d", "-s", "cmux-new-x", "-x", "120", "-y", "40",
+                         "-c", "/Users/me ##1", "-P", "-F", "#{session_name}"])
+        let ssh = RemoteTmuxSSHTransport(host: RemoteTmuxHost(destination: "user@host"))
+        #expect(!ssh.detachedSessionArguments(name: "n", columns: 1, rows: 1).contains("-c"))
+    }
+
+    /// Failures reach the user worded for this Mac, and a client and server of different versions
+    /// get their own message.
+    @Test func localFailuresArePresentedForThisMac() {
+        let profile = RemoteTmuxLocalTransportProfile(homeDirectory: "/Users/me")
+        #expect(profile.presentableError(.launchFailed("x")) == .localLaunchFailed("x"))
+        #expect(profile.presentableError(.unreachable("x")) == .localUnreachable("x"))
+        #expect(profile.presentableError(.commandFailed(exitCode: 1, stderr: "boom"))
+            == .localCommandFailed(exitCode: 1, stderr: "boom"))
+        let mismatch = "protocol version mismatch (client 8, server 7)"
+        #expect(profile.presentableError(.commandFailed(exitCode: 1, stderr: mismatch))
+            == .localTmuxVersionMismatch(mismatch))
+        for error in [
+            RemoteTmuxError.localLaunchFailed("x"), .localUnreachable("x"),
+            .localCommandFailed(exitCode: 1, stderr: "boom"), .localTmuxVersionMismatch(mismatch),
+        ] {
+            #expect(!error.message.lowercased().contains("ssh"))
+            #expect(!error.message.lowercased().contains("remote"))
+        }
+        // ssh keeps its own wording.
+        #expect(RemoteTmuxSSHTransportProfile().presentableError(.launchFailed("x")) == .launchFailed("x"))
     }
 
     // MARK: Identity
@@ -330,6 +392,29 @@ import Testing
         #expect(result.failure == .notOwnedByUser(path: socket.canonicalPath))
     }
 
+    /// Another local user who can write to the socket's directory can rename their own server's
+    /// socket into place between the check and tmux's connect, and the mirror would then type
+    /// into their shell. Only the user's own directory, or a root-owned sticky one, is safe.
+    @Test func boundaryRefusesASocketInADirectoryOthersCanWrite() throws {
+        let socket = try TemporarySocket()
+        defer { socket.cleanUp() }
+        try #require(chmod(socket.directory, 0o777) == 0)
+
+        let result = TerminalController.remoteTmuxLocalHostResult(
+            from: ["transport": "local", "socket_path": socket.path]
+        )
+        #expect(result.failure != nil, "a socket in a world-writable, non-sticky directory must be refused")
+        #expect(TerminalController.remoteTmuxHost(from: ["transport": "local", "socket_path": socket.path]) == nil)
+    }
+
+    /// Failures for a local mirror name this Mac, not a remote host called "local".
+    @Test func localWordingNeverNamesARemoteHost() {
+        let host = RemoteTmuxHost.local(serverSocketPath: "/tmp/cmux-lt-absent/default")
+        #expect(host.destination != "local")
+        let unknown = TerminalController.remoteTmuxBrokerFailureMessage(from: ["transport": "bogus"]) ?? ""
+        #expect(unknown.contains("local"), "the unknown-transport message lists local among the choices")
+    }
+
     @Test func boundaryRefusesASymlinkToSomethingThatIsNotASocket() throws {
         let socket = try TemporarySocket()
         defer { socket.cleanUp() }
@@ -358,6 +443,9 @@ import Testing
         let path: String
         let canonicalPath: String
         private let descriptor: Int32
+
+        /// The bound descriptor, for a test that needs the socket to accept connections.
+        var descriptorForListening: Int32 { descriptor }
 
         init() throws {
             let directory = "/tmp/cmux-lt-\(UUID().uuidString.prefix(8))"

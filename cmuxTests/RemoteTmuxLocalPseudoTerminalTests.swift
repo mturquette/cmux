@@ -114,7 +114,7 @@ import Testing
         #expect(await drained.value == expected)
     }
 
-    /// A19: a client that reads nothing (stopped with SIGSTOP, say) must not hold the writer's
+    /// A client that reads nothing (stopped with SIGSTOP, say) must not hold the writer's
     /// queue forever. Nothing reads the slave here, so the pty fills and the write gives up.
     @Test func writerGivesUpOnAPtyNobodyReads() throws {
         let pty = try RemoteTmuxLocalPseudoTerminal()
@@ -139,7 +139,63 @@ import Testing
         #expect(error.description.contains(String(cString: strerror(EBADF))))
     }
 
+    /// A control connection whose transport owns its pty gives the client a terminal on stdin and
+    /// stdout and keeps stderr a pipe, so tmux control mode starts and failure text stays readable.
+    /// The fake client reports through a FIFO, which the test reads to end-of-file: an edge, not a
+    /// poll.
+    @MainActor
+    @Test func aConnectionOnTheOwnedPtyGivesTheClientATerminalAndKeepsStderrAPipe() async throws {
+        let directory = NSTemporaryDirectory() + "remote-tmux-owned-pty-\(UUID().uuidString)"
+        try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: directory) }
+        let report = directory + "/report"
+        try #require(mkfifo(report, 0o600) == 0)
+        let client = directory + "/client"
+        let script = """
+        #!/bin/sh
+        { [ -t 0 ] && echo stdin-tty; [ -t 1 ] && echo stdout-tty; [ -t 2 ] || echo stderr-pipe; } > '\(report)'
+        exec sleep 30
+        """
+        try script.write(toFile: client, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: client)
+
+        // A blocking open: it returns once the client opens the FIFO to write its report, and the
+        // read then ends when the client closes it.
+        let reading = Task.detached { () -> String in
+            let descriptor = Darwin.open(report, O_RDONLY)
+            guard descriptor >= 0 else { return "open failed: errno \(errno)" }
+            let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+            return String(decoding: handle.readDataToEndOfFile(), as: UTF8.self)
+        }
+        let connection = RemoteTmuxControlConnection(
+            host: RemoteTmuxHost.local(serverSocketPath: directory + "/no-server"),
+            sessionName: "s",
+            transportProfile: OwnedPtyProfile(executable: client)
+        )
+        try connection.start()
+        defer { connection.stop() }
+
+        let reported = await reading.value
+        #expect(reported == "stdin-tty\nstdout-tty\nstderr-pipe\n", "the client reported \(reported.debugDescription)")
+    }
+
     // MARK: - Helpers
+
+    /// A transport that runs one fixed program on a pty cmux owns, with no arguments.
+    private struct OwnedPtyProfile: RemoteTmuxTransportProfile {
+        let executable: String
+
+        func executablePath() -> String { executable }
+        func controlStreamArgv(
+            host: RemoteTmuxHost, sessionName: String, mode: RemoteTmuxControlAttachMode
+        ) -> [String] { [] }
+        func oneShotArgv(host: RemoteTmuxHost, remoteCommand: String) -> [String] { [] }
+        var requiresPseudoTerminal: Bool { true }
+        var pseudoTerminal: RemoteTmuxPseudoTerminalKind { .owned }
+        var usesSharedControlMaster: Bool { false }
+        var remoteHalfSurvivesLocalExit: Bool { false }
+        var authenticationIsSSHShaped: Bool { false }
+    }
 
     private static func closeAll(_ pty: RemoteTmuxLocalPseudoTerminal) {
         try? pty.masterWriteHandle.close()

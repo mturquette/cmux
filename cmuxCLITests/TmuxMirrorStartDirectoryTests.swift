@@ -3,7 +3,7 @@ import Testing
 
 // TmuxMirrorStartDirectory.swift compiles into this target, so it needs no app import.
 
-/// Where the first session starts when `cmux tmux-mirror` starts the server (R1, R5, T20).
+/// Where the first session starts when `cmux tmux-mirror` starts the server.
 @Suite struct TmuxMirrorStartDirectoryTests {
     private func choose(
         pwd: String?,

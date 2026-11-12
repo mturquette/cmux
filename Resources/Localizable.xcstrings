@@ -645258,32 +645258,116 @@
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "%@ 的伺服器上沒有 tmux 工作階段。" } }
       }
     },
-    "remoteTmux.local.mirrorEnded.title": {
+    "remoteTmux.local.serverStopped.title": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "tmux session ended" } },
-        "ar": { "stringUnit": { "state": "translated", "value": "انتهت جلسة tmux" } },
-        "de": { "stringUnit": { "state": "translated", "value": "tmux-Sitzung beendet" } },
-        "es": { "stringUnit": { "state": "translated", "value": "La sesión de tmux terminó" } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Session tmux terminée" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "tmux セッションが終了しました" } },
-        "ko": { "stringUnit": { "state": "translated", "value": "tmux 세션이 종료됨" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "tmux 会话已结束" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "tmux 工作階段已結束" } }
+        "en": { "stringUnit": { "state": "translated", "value": "tmux server stopped" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "توقف خادم tmux" } },
+        "de": { "stringUnit": { "state": "translated", "value": "tmux-Server beendet" } },
+        "es": { "stringUnit": { "state": "translated", "value": "El servidor tmux se detuvo" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Serveur tmux arrêté" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "tmux サーバーが停止しました" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "tmux 서버가 중지됨" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "tmux 服务器已停止" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "tmux 伺服器已停止" } }
       }
     },
-    "remoteTmux.local.mirrorEnded.body": {
+    "remoteTmux.local.serverStopped.body": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "The session or its tmux server ended, so its mirror workspace was closed." } },
-        "ar": { "stringUnit": { "state": "translated", "value": "انتهت الجلسة أو خادم tmux الخاص بها، لذلك أُغلقت مساحة العمل المعكوسة." } },
-        "de": { "stringUnit": { "state": "translated", "value": "Die Sitzung oder ihr tmux-Server wurde beendet, daher wurde ihr Spiegel-Workspace geschlossen." } },
-        "es": { "stringUnit": { "state": "translated", "value": "La sesión o su servidor tmux terminó, así que se cerró su espacio de trabajo reflejado." } },
-        "fr": { "stringUnit": { "state": "translated", "value": "La session ou son serveur tmux s’est arrêté, son espace de travail miroir a donc été fermé." } },
-        "ja": { "stringUnit": { "state": "translated", "value": "セッションまたはその tmux サーバーが終了したため、ミラーのワークスペースを閉じました。" } },
-        "ko": { "stringUnit": { "state": "translated", "value": "세션 또는 tmux 서버가 종료되어 미러 워크스페이스를 닫았습니다." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "会话或其 tmux 服务器已结束，因此其镜像工作区已关闭。" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "工作階段或其 tmux 伺服器已結束，因此其鏡像工作區已關閉。" } }
+        "en": { "stringUnit": { "state": "translated", "value": "The tmux server at %@ stopped, so its mirror workspaces ended." } },
+        "ar": { "stringUnit": { "state": "translated", "value": "توقف خادم tmux عند %@، لذلك انتهت مساحات العمل المعكوسة الخاصة به." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Der tmux-Server unter %@ wurde beendet, daher wurden seine Spiegel-Workspaces geschlossen." } },
+        "es": { "stringUnit": { "state": "translated", "value": "El servidor tmux de %@ se detuvo, así que sus espacios de trabajo reflejados terminaron." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Le serveur tmux à %@ s’est arrêté, ses espaces de travail miroirs ont donc pris fin." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@ の tmux サーバーが停止したため、そのミラーのワークスペースは終了しました。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "%@의 tmux 서버가 중지되어 미러 워크스페이스가 종료되었습니다." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "%@ 处的 tmux 服务器已停止，因此其镜像工作区已结束。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "%@ 的 tmux 伺服器已停止，因此其鏡像工作區已結束。" } }
+      }
+    },
+    "remoteTmux.local.destination": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "this Mac" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "جهاز Mac هذا" } },
+        "de": { "stringUnit": { "state": "translated", "value": "diesem Mac" } },
+        "es": { "stringUnit": { "state": "translated", "value": "este Mac" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "ce Mac" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "この Mac" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "이 Mac" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "此 Mac" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "此 Mac" } }
+      }
+    },
+    "remoteTmux.local.socket.directoryNotPrivate": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "other users can replace files in %@, so the tmux socket there cannot be trusted" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "يمكن لمستخدمين آخرين استبدال الملفات في %@، لذلك لا يمكن الوثوق بمقبس tmux هناك" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Andere Benutzer können Dateien in %@ ersetzen, daher ist dem tmux-Socket dort nicht zu trauen" } },
+        "es": { "stringUnit": { "state": "translated", "value": "otros usuarios pueden reemplazar archivos en %@, así que no se puede confiar en el socket de tmux de ahí" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "d’autres utilisateurs peuvent remplacer des fichiers dans %@, le socket tmux qui s’y trouve n’est donc pas fiable" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@ では他のユーザーがファイルを置き換えられるため、そこにある tmux ソケットは信頼できません" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "다른 사용자가 %@의 파일을 바꿀 수 있으므로 그곳의 tmux 소켓은 신뢰할 수 없습니다" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "其他用户可以替换 %@ 中的文件，因此那里的 tmux 套接字不可信" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "其他使用者可以取代 %@ 中的檔案，因此那裡的 tmux 通訊端不可信" } }
+      }
+    },
+    "remoteTmux.error.localCommandFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "local tmux failed (exit %d)" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "فشل tmux المحلي (رمز الخروج %d)" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Lokales tmux ist fehlgeschlagen (Exit-Code %d)" } },
+        "es": { "stringUnit": { "state": "translated", "value": "falló el tmux local (código de salida %d)" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "échec du tmux local (code de sortie %d)" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ローカルの tmux が失敗しました (終了コード %d)" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "로컬 tmux 실패(종료 코드 %d)" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "本地 tmux 失败（退出码 %d）" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "本機 tmux 失敗（結束代碼 %d）" } }
+      }
+    },
+    "remoteTmux.error.localCommandFailedWithDetail": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "local tmux failed (exit %d): %@" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "فشل tmux المحلي (رمز الخروج %d): %@" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Lokales tmux ist fehlgeschlagen (Exit-Code %d): %@" } },
+        "es": { "stringUnit": { "state": "translated", "value": "falló el tmux local (código de salida %d): %@" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "échec du tmux local (code de sortie %d) : %@" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ローカルの tmux が失敗しました (終了コード %d): %@" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "로컬 tmux 실패(종료 코드 %d): %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "本地 tmux 失败（退出码 %d）：%@" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "本機 tmux 失敗（結束代碼 %d）：%@" } }
+      }
+    },
+    "remoteTmux.error.localUnreachable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "local tmux mirror failed: %@" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "فشل انعكاس tmux المحلي: %@" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Lokaler tmux-Spiegel fehlgeschlagen: %@" } },
+        "es": { "stringUnit": { "state": "translated", "value": "falló el reflejo de tmux local: %@" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "échec du miroir tmux local : %@" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ローカルの tmux ミラーが失敗しました: %@" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "로컬 tmux 미러 실패: %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "本地 tmux 镜像失败：%@" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "本機 tmux 鏡像失敗：%@" } }
+      }
+    },
+    "remoteTmux.error.localVersionMismatch": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "the tmux on this Mac is a different version from the running tmux server, and tmux refuses to connect them (%@)" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "إصدار tmux على جهاز Mac هذا يختلف عن إصدار خادم tmux قيد التشغيل، ويرفض tmux الربط بينهما (%@)" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Das tmux auf diesem Mac hat eine andere Version als der laufende tmux-Server, und tmux verbindet die beiden nicht (%@)" } },
+        "es": { "stringUnit": { "state": "translated", "value": "el tmux de este Mac es de una versión distinta a la del servidor tmux en ejecución, y tmux se niega a conectarlos (%@)" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "le tmux de ce Mac n’a pas la même version que le serveur tmux en cours, et tmux refuse de les connecter (%@)" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "この Mac の tmux と実行中の tmux サーバーのバージョンが異なるため、tmux が接続を拒否しました (%@)" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "이 Mac의 tmux와 실행 중인 tmux 서버의 버전이 달라 tmux가 연결을 거부합니다(%@)" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "此 Mac 上的 tmux 与正在运行的 tmux 服务器版本不同，tmux 拒绝连接两者（%@）" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "此 Mac 上的 tmux 與正在執行的 tmux 伺服器版本不同，tmux 拒絕連接兩者（%@）" } }
       }
     },
     "remoteTmux.error.localTmuxTimedOut": {
@@ -645521,55 +645605,55 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "transport is not one cmux knows; use ssh or et"
+            "value": "transport is not one cmux knows; use ssh, et or local"
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "قيمة transport ليست نقلًا يعرفه cmux؛ استخدم ssh أو et"
+            "value": "قيمة transport ليست نقلًا يعرفه cmux؛ استخدم ssh أو et أو local"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "transport ist kein Transport, den cmux kennt; verwenden Sie ssh oder et"
+            "value": "transport ist kein Transport, den cmux kennt; verwenden Sie ssh, et oder local"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "transport no es un transporte que cmux conozca; usa ssh o et"
+            "value": "transport no es un transporte que cmux conozca; usa ssh, et o local"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "transport n’est pas un transport connu de cmux ; utilisez ssh ou et"
+            "value": "transport n’est pas un transport connu de cmux ; utilisez ssh, et ou local"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "transport は cmux が対応していない値です。ssh または et を使用してください"
+            "value": "transport は cmux が対応していない値です。ssh、et または local を使用してください"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "transport가 cmux가 아는 값이 아닙니다. ssh 또는 et를 사용하세요"
+            "value": "transport가 cmux가 아는 값이 아닙니다. ssh, et 또는 local을 사용하세요"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "transport 不是 cmux 支持的传输方式；请使用 ssh 或 et"
+            "value": "transport 不是 cmux 支持的传输方式；请使用 ssh、et 或 local"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "transport 不是 cmux 支援的傳輸方式；請使用 ssh 或 et"
+            "value": "transport 不是 cmux 支援的傳輸方式；請使用 ssh、et 或 local"
           }
         }
       }

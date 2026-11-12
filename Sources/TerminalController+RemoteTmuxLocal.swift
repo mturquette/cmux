@@ -35,3 +35,23 @@ extension TerminalController {
         }
     }
 }
+
+extension TerminalController {
+    /// Runs a remote-tmux RPC for `host`, rewording any ``RemoteTmuxError`` through the host's
+    /// transport profile, so a local mirror's failures talk about this Mac rather than about a
+    /// remote host reached over ssh. ssh and et errors pass through unchanged.
+    nonisolated func remoteTmuxCall(
+        id: Any?,
+        host: RemoteTmuxHost,
+        timeoutSeconds: TimeInterval?,
+        _ work: @escaping () async throws -> [String: Any]
+    ) -> String {
+        v2VmCall(id: id, timeoutSeconds: timeoutSeconds) {
+            do {
+                return try await work()
+            } catch let error as RemoteTmuxError {
+                throw host.transportProfile.presentableError(error)
+            }
+        }
+    }
+}

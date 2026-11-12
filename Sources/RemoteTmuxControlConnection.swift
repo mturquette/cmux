@@ -766,7 +766,7 @@ final class RemoteTmuxControlConnection {
         // A pty cmux owns, so the kernel hangs the client up the moment cmux dies.
         // See RemoteTmuxLocalPseudoTerminal for the measurement behind it.
         let ownedPseudoTerminal: RemoteTmuxLocalPseudoTerminal?
-        if transportProfile.requiresPseudoTerminal, transportProfile.ownsPseudoTerminal {
+        if transportProfile.pseudoTerminal == .owned {
             record("transport-owned-pty")
             do {
                 ownedPseudoTerminal = try RemoteTmuxLocalPseudoTerminal()
@@ -776,7 +776,7 @@ final class RemoteTmuxControlConnection {
             }
             proc.executableURL = URL(fileURLWithPath: transportExecutable)
             proc.arguments = transportArgv
-        } else if transportProfile.requiresPseudoTerminal {
+        } else if transportProfile.pseudoTerminal == .scriptWrapper {
             ownedPseudoTerminal = nil
             // Not because the transport is silent on pipes — it is not, measured — but because
             // without usable terminal modes the client cannot go raw and the same stream arrives

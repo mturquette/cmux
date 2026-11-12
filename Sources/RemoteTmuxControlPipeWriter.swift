@@ -58,7 +58,7 @@ final class RemoteTmuxControlPipeWriter {
     /// with SIGSTOP, never drains the pty and never hangs up, so an unbounded wait would hold this
     /// queue, and every write behind it, for as long as the client stays stopped. After
     /// `stallTimeoutMilliseconds` with no room to write, the write fails, and the connection's
-    /// existing write-failure handling takes over (R17, R19: no wedged mirror, no stuck teardown).
+    /// existing write-failure handling takes over, so a mirror never wedges and teardown never stalls.
     nonisolated static func writeAll(
         _ data: Data,
         to descriptor: Int32,

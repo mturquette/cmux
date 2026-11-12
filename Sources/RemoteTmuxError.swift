@@ -49,6 +49,16 @@ enum RemoteTmuxError: Error, Sendable, Equatable {
     /// A local tmux command did not finish before its deadline, for example because the server is
     /// stopped. Carries the socket path.
     case localTmuxTimedOut(socketPath: String)
+
+    /// A local tmux command failed. The local wording of ``commandFailed(exitCode:stderr:)``.
+    case localCommandFailed(exitCode: Int32, stderr: String)
+
+    /// A local mirror could not be reached or attached. The local wording of ``unreachable(_:)``.
+    case localUnreachable(String)
+
+    /// The tmux client cmux found and the running server are different versions, which tmux
+    /// refuses to connect. Carries tmux's own message.
+    case localTmuxVersionMismatch(String)
 }
 
 extension RemoteTmuxError {
@@ -168,6 +178,34 @@ extension RemoteTmuxError {
                 defaultValue: "the tmux server at %@ did not answer in time; it may be frozen"
             )
             return String(format: format, Self.sanitizedDetail(socketPath))
+        case let .localCommandFailed(exitCode, stderr):
+            let detail = Self.sanitizedDetail(stderr)
+            if detail.isEmpty {
+                return String(
+                    format: String(localized: "remoteTmux.error.localCommandFailed", defaultValue: "local tmux failed (exit %d)"),
+                    Int(exitCode)
+                )
+            }
+            return String(
+                format: String(
+                    localized: "remoteTmux.error.localCommandFailedWithDetail",
+                    defaultValue: "local tmux failed (exit %d): %@"
+                ),
+                Int(exitCode), detail
+            )
+        case let .localUnreachable(detail):
+            return String(
+                format: String(localized: "remoteTmux.error.localUnreachable", defaultValue: "local tmux mirror failed: %@"),
+                Self.sanitizedDetail(detail)
+            )
+        case let .localTmuxVersionMismatch(detail):
+            return String(
+                format: String(
+                    localized: "remoteTmux.error.localVersionMismatch",
+                    defaultValue: "the tmux on this Mac is a different version from the running tmux server, and tmux refuses to connect them (%@)"
+                ),
+                Self.sanitizedDetail(detail)
+            )
         }
     }
 

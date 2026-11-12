@@ -3,7 +3,7 @@ import Testing
 
 // TmuxMirrorInvocation.swift compiles into this target, so it needs no app import.
 
-/// The `cmux tmux-mirror` argument contract (D9, R2, R13).
+/// The `cmux tmux-mirror` argument contract.
 @Suite struct TmuxMirrorInvocationTests {
     @Test func noArgumentsMirrorsTheCallersServer() throws {
         let invocation = try TmuxMirrorInvocation.parse([])
