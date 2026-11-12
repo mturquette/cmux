@@ -14,13 +14,10 @@ import Testing
 ///
 /// Runs only where both releases are installed under `/opt/tmux`, as in the test VM.
 @MainActor
-@Suite(.serialized, .enabled(if: RemoteTmuxLocalMixedReleaseTests.bothReleasesInstalled))
+@Suite(.serialized, .enabled(if: remoteTmuxMixedReleasesInstalled))
 struct RemoteTmuxLocalMixedReleaseTests {
-    nonisolated static let oldTmux = "/opt/tmux/3.2a/bin/tmux"
-    nonisolated static let newTmux = "/opt/tmux/3.6a/bin/tmux"
-    nonisolated static var bothReleasesInstalled: Bool {
-        FileManager.default.isExecutableFile(atPath: oldTmux) && FileManager.default.isExecutableFile(atPath: newTmux)
-    }
+    nonisolated static let oldTmux = remoteTmuxOldRelease
+    nonisolated static let newTmux = remoteTmuxNewRelease
 
     /// A 3.2a server, mirrored by an app whose PATH finds 3.6a first: the client is the server's
     /// own 3.2a binary, and the mirror publishes its windows.
@@ -180,3 +177,11 @@ struct RemoteTmuxLocalMixedReleaseTests {
         return String(cString: resolved)
     }
 }
+
+/// The two releases the suite needs, at the paths the test VM installs them. File-level, because
+/// a suite's own traits cannot refer to the suite type.
+private let remoteTmuxOldRelease = "/opt/tmux/3.2a/bin/tmux"
+private let remoteTmuxNewRelease = "/opt/tmux/3.6a/bin/tmux"
+private let remoteTmuxMixedReleasesInstalled =
+    FileManager.default.isExecutableFile(atPath: remoteTmuxOldRelease)
+        && FileManager.default.isExecutableFile(atPath: remoteTmuxNewRelease)
