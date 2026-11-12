@@ -1,5 +1,18 @@
 import Darwin
 import Foundation
+import os
+
+/// The binary a running tmux server was started from, as the kernel reports it, before cmux has
+/// checked that it really is that server's tmux.
+///
+/// The process is named by its pid and its start time together, so a later process that reuses the
+/// pid is a different candidate.
+struct RemoteTmuxServerBinaryCandidate: Sendable, Hashable {
+    let path: String
+    let processID: pid_t
+    /// Microseconds since the epoch at which the process started.
+    let startTime: Int64
+}
 
 /// Finds the tmux binary a running local server was started from, so cmux's client is always the
 /// same build as the server it talks to.
@@ -11,35 +24,42 @@ import Foundation
 ///
 /// The server is found from its socket, with no tmux process: connecting to a listening Unix
 /// socket gives the listener's pid (`LOCAL_PEERPID`) and user (`LOCAL_PEERCRED`), and
-/// `proc_pidpath` gives that pid's executable. This is the same answer `#{pid}` and
-/// `ps -o comm=` give, measured on tmux 3.2a and 3.6a, without starting a client to ask.
-enum RemoteTmuxLocalServerBinary {
-    /// The executable of the tmux server listening on `socketPath`, or nil when there is none to use.
-    ///
-    /// Nil when nothing listens there, when the listener belongs to another user, or when its
-    /// binary no longer exists. The last is common: `brew upgrade tmux` deletes the old release
-    /// while its server keeps running, and the kernel still reports the deleted path.
-    ///
-    /// - Parameters:
-    ///   - socketPath: the server socket, already checked by ``RemoteTmuxLocalServerSocket``.
-    ///   - userID: the user the server must run as; the current user unless a test says otherwise.
-    ///   - isExecutable: whether a path names an executable file; injected so a test can make the
-    ///     binary disappear.
-    static func executable(
-        forSocket socketPath: String,
+/// `proc_pidpath` gives that pid's executable. The kernel's answer is only a candidate. Before it
+/// is used, the transport runs it once with `-V` and accepts it only if it prints the server's own
+/// release (``RemoteTmuxServerBinaryVerifications``), which rules out a reused pid and a binary
+/// rebuilt in place as another release.
+struct RemoteTmuxLocalServerBinary: Sendable {
+    /// The user the server must run as.
+    let userID: uid_t
+    /// Whether a path names an executable file; injected so a test can make the binary disappear.
+    let isExecutable: @Sendable (String) -> Bool
+
+    init(
         userID: uid_t = getuid(),
-        isExecutable: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }
-    ) -> String? {
-        guard let pid = serverProcessID(socketPath: socketPath, userID: userID),
-              let path = executablePath(ofProcess: pid),
+        isExecutable: @escaping @Sendable (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }
+    ) {
+        self.userID = userID
+        self.isExecutable = isExecutable
+    }
+
+    /// The executable of the tmux server listening on `socketPath`, or nil when there is none to try.
+    ///
+    /// Nil when nothing listens there, when the listener or its process belongs to another user, or
+    /// when its binary no longer exists. The last is common: `brew upgrade tmux` deletes the old
+    /// release while its server keeps running, and the kernel still reports the deleted path.
+    func candidate(forSocket socketPath: String) -> RemoteTmuxServerBinaryCandidate? {
+        guard let pid = serverProcessID(socketPath: socketPath),
+              let process = Self.processInfo(pid), process.pbi_uid == userID,
+              let path = Self.executablePath(ofProcess: pid),
               path.hasPrefix("/"),
               isExecutable(path)
         else { return nil }
-        return path
+        let startTime = Int64(process.pbi_start_tvsec) * 1_000_000 + Int64(process.pbi_start_tvusec)
+        return RemoteTmuxServerBinaryCandidate(path: path, processID: pid, startTime: startTime)
     }
 
-    /// The pid of the process listening on `socketPath`, when it runs as `userID`.
-    static func serverProcessID(socketPath: String, userID: uid_t = getuid()) -> pid_t? {
+    /// The pid of the process listening on `socketPath`, when it runs as ``userID``.
+    func serverProcessID(socketPath: String) -> pid_t? {
         let descriptor = socket(AF_UNIX, SOCK_STREAM, 0)
         guard descriptor >= 0 else { return nil }
         defer { Darwin.close(descriptor) }
@@ -75,16 +95,47 @@ enum RemoteTmuxLocalServerBinary {
         return path.isEmpty ? nil : path
     }
 
+    /// The owner and start time of `pid`.
+    private static func processInfo(_ pid: pid_t) -> proc_bsdinfo? {
+        var info = proc_bsdinfo()
+        let expectedSize = MemoryLayout<proc_bsdinfo>.stride
+        guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(expectedSize)) == expectedSize else { return nil }
+        return info
+    }
+
     /// The release in `tmux -V` output: `tmux 3.2a` gives `3.2a`, `tmux next-3.6` gives `next-3.6`.
+    /// Anything else, including the output of a program that is not tmux, gives nil.
     static func release(fromClientVersionOutput output: String) -> String? {
         let words = output.split(whereSeparator: \.isWhitespace)
-        guard let last = words.last, words.count >= 2, words.first == "tmux" else { return nil }
-        return String(last)
+        guard words.count == 2, words[0] == "tmux" else { return nil }
+        return String(words[1])
     }
 
     /// The release in the server's `#{version}` answer: `3.2a\n` gives `3.2a`.
     static func release(fromServerVersionOutput output: String) -> String? {
         let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+/// What cmux learned when it ran a server's candidate binary with `-V`, kept per server process so
+/// each server costs one extra process however many commands cmux sends it.
+final class RemoteTmuxServerBinaryVerifications: Sendable {
+    /// The app's one table. Tests make their own.
+    static let shared = RemoteTmuxServerBinaryVerifications()
+
+    private let results = OSAllocatedUnfairLock(initialState: [RemoteTmuxServerBinaryCandidate: Bool]())
+
+    /// Whether `candidate` printed its server's release, or nil when it has not been run yet.
+    func result(for candidate: RemoteTmuxServerBinaryCandidate) -> Bool? {
+        results.withLock { $0[candidate] }
+    }
+
+    func record(_ candidate: RemoteTmuxServerBinaryCandidate, matchesServer: Bool) {
+        results.withLock { table in
+            // A server that exited leaves its entry behind; a bound keeps the table small.
+            if table.count >= 64 { table.removeAll() }
+            table[candidate] = matchesServer
+        }
     }
 }

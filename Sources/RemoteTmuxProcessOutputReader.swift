@@ -21,9 +21,12 @@ final class RemoteTmuxProcessOutputReader: @unchecked Sendable {
     private var source: DispatchSourceRead?
     private var pendingBytes = 0
     private var closed = false
-    /// Set once a descriptor attached with `closingOnFinish` has been closed.
+    #if DEBUG
+    /// Test support: set once a descriptor attached with `closingOnFinish` has been closed.
     private var descriptorClosed = false
     private var descriptorCloseWaiters: [CheckedContinuation<Void, Never>] = []
+    private var closesDescriptorOnFinish = false
+    #endif
 
     init(
         label: String,
@@ -55,11 +58,16 @@ final class RemoteTmuxProcessOutputReader: @unchecked Sendable {
             guard let self, !self.closed, self.source == nil else {
                 if closingOnFinish {
                     try? handle.close()
+                    #if DEBUG
                     self?.noteDescriptorClosed()
+                    #endif
                 }
                 return
             }
             self.handle = handle
+            #if DEBUG
+            self.closesDescriptorOnFinish = closingOnFinish
+            #endif
             self.makeNonblocking(fileDescriptor)
             let source = DispatchSource.makeReadSource(fileDescriptor: fileDescriptor, queue: self.queue)
             source.setEventHandler { [weak self] in
@@ -70,7 +78,9 @@ final class RemoteTmuxProcessOutputReader: @unchecked Sendable {
                 // descriptor, so closing here cannot race a read on a reused descriptor number.
                 source.setCancelHandler { [weak self] in
                     try? handle.close()
+                    #if DEBUG
                     self?.noteDescriptorClosed()
+                    #endif
                 }
             }
             self.source = source
@@ -89,15 +99,16 @@ final class RemoteTmuxProcessOutputReader: @unchecked Sendable {
         }
     }
 
-    /// Returns once the descriptor this reader was told to close on finish has been closed.
+    #if DEBUG
+    /// Test support: returns once the descriptor this reader was told to close on finish has been
+    /// closed, or at once for a reader that does not close its descriptor.
     ///
     /// The close happens on the reader's queue, after the read source is cancelled, so it has no
-    /// other edge a caller could wait on. Only meaningful for a reader attached with
-    /// `closingOnFinish`; for any other reader it never returns.
+    /// other edge a caller could wait on.
     func waitUntilDescriptorClosed() async {
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             queue.async { [self] in
-                if descriptorClosed {
+                if descriptorClosed || !closesDescriptorOnFinish {
                     continuation.resume()
                 } else {
                     descriptorCloseWaiters.append(continuation)
@@ -113,6 +124,7 @@ final class RemoteTmuxProcessOutputReader: @unchecked Sendable {
         descriptorCloseWaiters.removeAll()
         for waiter in waiters { waiter.resume() }
     }
+    #endif
 
     /// Cancels the reader without promising delivery of unread bytes.
     func close() {
