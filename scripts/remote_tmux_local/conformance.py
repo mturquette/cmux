@@ -898,13 +898,27 @@ def t18_server_dies(ctx):
     except CheckFailed as error:
         ctx.check(False, f"the mirror workspaces end within 2 seconds ({error})")
     seen = {}
+    details = {}  # Q-A15: what each new child is, recorded the moment it is first seen
+    last_seen = {}
     sample_end = time.monotonic() + 4.0
     while time.monotonic() < sample_end:
+        now = time.monotonic() - killed_at
         for child in child_pids(pid) - children_before if pid else set():
-            seen.setdefault(child, time.monotonic() - killed_at)
-        time.sleep(0.1)
+            if child not in seen:
+                seen[child] = now
+                row = subprocess.run(["ps", "-o", "ppid=,lstart=,command=", "-p", str(child)],
+                                     stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True).stdout.strip()
+                details[child] = row or "(exited before ps could read it)"
+            last_seen[child] = now
+        time.sleep(0.02)
+    for child in sorted(seen, key=seen.get):
+        lifetime = last_seen[child] - seen[child]
+        ctx.log(f"new child pid {child}: first seen {seen[child]:.2f} s after kill-server, last seen "
+                f"{last_seen[child]:.2f} s (lived at least {lifetime:.2f} s); ppid, start time, command: {details[child]}")
     late = [p for p, t in seen.items() if t > 2.0]
-    ctx.check(not late, f"no new child process is spawned after the first 2 seconds (spawn times {sorted(seen.values())})")
+    ctx.check(not late, f"no new child process is spawned after the first 2 seconds (spawn times "
+              f"{sorted(round(t, 2) for t in seen.values())}; late: "
+              f"{'; '.join(details[p] for p in late) or 'none'})")
     # Q-B3: the message is a cmux notification. Compare by id, not by count, and require that a
     # new one is about this mirror (names a mirrored session, or tmux), so an unrelated
     # notification cannot pass the check. Round 2's count-only check passed and round 3's
@@ -1086,6 +1100,7 @@ def main():
     parser.add_argument("--only", help="comma-separated test ids, e.g. T1,T3")
     parser.add_argument("--list", action="store_true", help="list the tests and exit")
     parser.add_argument("--leak-cycles", type=int, default=50, help="attach and detach cycles for T16 (R17 says 50)")
+    parser.add_argument("--repeat", type=int, default=1, help="run each selected test this many times in a row")
     args = parser.parse_args()
     cases = list(REGISTRY)
     if args.list:
@@ -1095,6 +1110,8 @@ def main():
     if args.only:
         wanted = {t.strip().upper() for t in args.only.split(",") if t.strip()}
         cases = [c for c in cases if c.test_id in wanted]
+    if args.repeat > 1:
+        cases = [c for c in cases for _ in range(args.repeat)]
     harness = Harness("remote-tmux-local-conformance", "T1-T20")
     harness.setup(args)
     harness.leak_cycles = args.leak_cycles
