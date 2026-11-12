@@ -16,6 +16,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import signal
 import stat
 import subprocess
@@ -397,9 +398,21 @@ for a in "$@"; do
 done
 exec '{ctx.h.tmux_bin}' "$@"
 """)
-    ctx.relaunch(path=f"{fakebin}:/usr/bin:/bin:/usr/sbin:/sbin", label="old-tmux")
-    server = ctx.server("s6")
+    # The app runs the running server's own tmux binary while it exists (D4a), so the fake
+    # would never be run. Start the server from a copy of tmux and delete the copy: the app
+    # then falls back to the tmux on its PATH, which is the fake (Q-A14). The harness keeps
+    # talking to the server with the real binary, which is the same release.
+    copy_dir = os.path.join(ctx.dir, "server-tmux-copy")
+    os.makedirs(copy_dir)
+    copy = os.path.join(copy_dir, "tmux")
+    shutil.copy2(ctx.h.tmux_bin, copy)
+    server = ctx.server("s6", binary=copy)
     server.new_session("t6")
+    os.remove(copy)
+    server.binary = ctx.h.tmux_bin
+    ctx.check(not os.path.exists(copy) and server.alive(),
+              "the server runs from a tmux binary that no longer exists on disk")
+    ctx.relaunch(path=f"{fakebin}:/usr/bin:/bin:/usr/sbin:/sbin", label="old-tmux")
     refused("tmux older than 3.2", server.socket_path)
     ctx.h.app.launch(label="base")
     ctx.log("tmux not installed: not reproducible live, because the resolver also searches the fixed "
