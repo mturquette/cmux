@@ -645258,6 +645258,20 @@
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "%@ 的伺服器上沒有 tmux 工作階段。" } }
       }
     },
+    "dialog.remoteTmux.newSessionFailed.localMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "tmux new-session failed. No workspace was created." } },
+        "ar": { "stringUnit": { "state": "translated", "value": "فشل tmux new-session. لم يتم إنشاء مساحة عمل." } },
+        "de": { "stringUnit": { "state": "translated", "value": "tmux new-session ist fehlgeschlagen. Es wurde kein Arbeitsbereich erstellt." } },
+        "es": { "stringUnit": { "state": "translated", "value": "tmux new-session falló. No se creó ningún espacio de trabajo." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "tmux new-session a échoué. Aucun espace de travail n’a été créé." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "tmux new-session が失敗しました。ワークスペースは作成されませんでした。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "tmux new-session이 실패했습니다. 워크스페이스가 만들어지지 않았습니다." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "tmux new-session 失败。未创建工作区。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "tmux new-session 失敗。未建立工作區。" } }
+      }
+    },
     "remoteTmux.local.serverStopped.title": {
       "extractionState": "manual",
       "localizations": {

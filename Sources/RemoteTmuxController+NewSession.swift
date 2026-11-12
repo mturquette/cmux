@@ -266,10 +266,16 @@ extension RemoteTmuxController {
                 localized: "dialog.remoteTmux.newSessionFailed.title",
                 defaultValue: "Couldn't Create a tmux Session on \(host.destination)"
             )
-            message = String(
-                localized: "dialog.remoteTmux.newSessionFailed.message",
-                defaultValue: "tmux new-session failed on the remote host. No workspace was created."
-            )
+            // A local server is not a remote host, and the title already names where it ran.
+            message = host.transport == .local
+                ? String(
+                    localized: "dialog.remoteTmux.newSessionFailed.localMessage",
+                    defaultValue: "tmux new-session failed. No workspace was created."
+                )
+                : String(
+                    localized: "dialog.remoteTmux.newSessionFailed.message",
+                    defaultValue: "tmux new-session failed on the remote host. No workspace was created."
+                )
         case .attach(_, let removed):
             title = String(
                 localized: "dialog.remoteTmux.newSessionAttachFailed.title",
