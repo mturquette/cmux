@@ -1472,7 +1472,6 @@
 		C0DE11260000000000000021 /* CMUXCLI+TmuxCompatStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE11260000000000000022 /* CMUXCLI+TmuxCompatStore.swift */; };
 		B9000044A1B2C3D4E5F60719 /* CMUXCLI+TmuxCompatSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000045A1B2C3D4E5F60719 /* CMUXCLI+TmuxCompatSupport.swift */; };
 		7A3F00000000000000000014 /* CMUXCLI+TmuxMirror.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A3F00000000000000000004 /* CMUXCLI+TmuxMirror.swift */; };
-		7A3F00000000000000000015 /* RemoteTmuxLocalServerSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0871558F5DB10143DA5A7538 /* RemoteTmuxLocalServerSocket.swift */; };
 		B9000033A1B2C3D4E5F60719 /* CMUXCLI+TopRendering.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000032A1B2C3D4E5F60719 /* CMUXCLI+TopRendering.swift */; };
 		D1FF52000000000000000001 /* CMUXCLI+TypedDiffViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1FF52000000000000000002 /* CMUXCLI+TypedDiffViewer.swift */; };
 		3694B7A8D2894E549E59A8F6 /* CMUXCLI+Vault.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74B5FDC25DCB4D39ADD17F39 /* CMUXCLI+Vault.swift */; };
@@ -3146,6 +3145,7 @@
 		3F9BDFF45EF40505293506A0 /* RemoteTmuxLinkedWorkspaceModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17096B295FD35EC68C305757 /* RemoteTmuxLinkedWorkspaceModelTests.swift */; };
 		E29F4163CA6BD6A5ECF04DDA /* RemoteTmuxLocalPseudoTerminal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25E4C08DE60A39D71870BDF8 /* RemoteTmuxLocalPseudoTerminal.swift */; };
 		84057BBB69BA8147610C0F12 /* RemoteTmuxLocalPseudoTerminalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81B9246931FC124449EB63A3 /* RemoteTmuxLocalPseudoTerminalTests.swift */; };
+		7A3F00000000000000000015 /* RemoteTmuxLocalServerSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0871558F5DB10143DA5A7538 /* RemoteTmuxLocalServerSocket.swift */; };
 		A80C27AF5192771E319995C0 /* RemoteTmuxLocalServerSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0871558F5DB10143DA5A7538 /* RemoteTmuxLocalServerSocket.swift */; };
 		F902B08977277C3A6FEFBA0A /* RemoteTmuxLocalTransportProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ECCA96218D55E21189EC1A8 /* RemoteTmuxLocalTransportProfile.swift */; };
 		6E05741D07300386BD3F1C58 /* RemoteTmuxLocalTransportProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C9C60A767D9DDE6CA4A3287 /* RemoteTmuxLocalTransportProfileTests.swift */; };
@@ -18245,7 +18245,6 @@
 				C0DE11260000000000000021 /* CMUXCLI+TmuxCompatStore.swift in Sources */,
 				B9000044A1B2C3D4E5F60719 /* CMUXCLI+TmuxCompatSupport.swift in Sources */,
 				7A3F00000000000000000014 /* CMUXCLI+TmuxMirror.swift in Sources */,
-				7A3F00000000000000000015 /* RemoteTmuxLocalServerSocket.swift in Sources */,
 				B9000033A1B2C3D4E5F60719 /* CMUXCLI+TopRendering.swift in Sources */,
 				D1FF52000000000000000001 /* CMUXCLI+TypedDiffViewer.swift in Sources */,
 				3694B7A8D2894E549E59A8F6 /* CMUXCLI+Vault.swift in Sources */,
@@ -18316,6 +18315,7 @@
 					C15873000000000000000004 /* RemotesArgumentParser.swift in Sources */,
 				B9000029A1B2C3D4E5F60719 /* RemoteSessionBundledResourceLoader.swift in Sources */,
 				C0DE18477000000000000001 /* RemoteTmuxInvocation.swift in Sources */,
+				7A3F00000000000000000015 /* RemoteTmuxLocalServerSocket.swift in Sources */,
 				C1A900000000000000000022 /* SharedLegacyFacadeCommand.swift in Sources */,
 				A10052000000000000000002 /* SocketClient+StartupWait.swift in Sources */,
 				D1275700D1275700D1275701 /* SocketClient+V2.swift in Sources */,
