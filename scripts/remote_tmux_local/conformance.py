@@ -468,6 +468,17 @@ def t8_paste(ctx):
         text = server.run("capture-pane", "-p", "-J", "-t", pane).stdout
         return [m.replace("\\", "") for m in path_pattern.findall(text)]
 
+    # The drop RPC takes no workspace parameter and looks the surface up only in the active
+    # window's selected workspace (resolveTerminalPanel, Q-A11), and the mirror was attached
+    # without focus. Select the mirror's workspace for the drop, as a user dropping onto that
+    # pane would have it on screen, then put the previous selection back.
+    previous = ctx.h.cmux.current_workspace()
+    owner = ctx.h.cmux.workspace_of_surface(surface)
+    ctx.check(owner is not None, f"the mirrored pane's surface belongs to a workspace ({owner})")
+    if owner:
+        ctx.h.cmux.result("workspace.select", {"workspace_id": owner})
+        if previous and previous != owner:
+            ctx.on_cleanup(lambda: ctx.h.cmux.call("workspace.select", {"workspace_id": previous}))
     reply = ctx.h.cmux.call("debug.terminal.simulate_file_drop",
                             {"surface_id": surface, "paths": [image], "route": "terminal", "payload": "image"})
     ctx.check(reply.get("ok") is True, f"the image drop is accepted ({reply.get('error')})")
@@ -806,10 +817,46 @@ def t17_crash(ctx):
     ctx.require(bool(server.control_clients()), "the mirror holds control clients before the crash")
     pid = ctx.h.app.pid()
     ctx.require(pid is not None, "the tagged app's pid is known")
+    # Diagnostics for Q-A12 (they do not change the check): the clients' and the app's
+    # process group and session before the kill, and, for any client still attached after
+    # it, its process state and open descriptors, then how long it took to go away.
+    capture = os.path.join(ctx.h.artifacts, "t17-capture.txt")
+
+    def ps_rows(pids):
+        if not pids:
+            return "(none)\n"
+        return subprocess.run(["ps", "-o", "pid,ppid,pgid,sess,stat,command", "-p", ",".join(pids)],
+                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True).stdout
+
+    before = [c["pid"] for c in server.control_clients()]
+    with open(capture, "w") as out:
+        out.write(f"app pid {pid}; before the kill:\n" + ps_rows([str(pid)] + before))
     os.kill(pid, signal.SIGKILL)
     killed_at = time.monotonic()
     time.sleep(max(0.0, 2.0 - (time.monotonic() - killed_at)))
     left = server.control_clients()
+    if left:
+        pids = [c["pid"] for c in left]
+        with open(capture, "a") as out:
+            out.write("\n2 s after kill -9, still attached:\n" + ps_rows(pids))
+            for client in pids:
+                listing = subprocess.run(["lsof", "-n", "-P", "-p", client], stdout=subprocess.PIPE,
+                                         stderr=subprocess.STDOUT, text=True).stdout
+                out.write(f"\nlsof -p {client}:\n{listing}")
+            # Who else holds the clients' ttys open: the pty master's holder is the question.
+            for client in pids:
+                tty = subprocess.run(["ps", "-o", "tty=", "-p", client], stdout=subprocess.PIPE, text=True).stdout.strip()
+                if tty and tty not in ("??", "-"):
+                    holders = subprocess.run(["lsof", "-n", "-P", f"/dev/{tty}"], stdout=subprocess.PIPE,
+                                             stderr=subprocess.STDOUT, text=True).stdout
+                    out.write(f"\nholders of /dev/{tty} (client {client}):\n{holders}")
+        try:
+            wait_until(lambda: not server.control_clients(), timeout=15.0, interval=0.1, what="the clients to detach")
+            gone = time.monotonic() - killed_at
+        except CheckFailed:
+            gone = None
+        ctx.log(f"leftover clients went away {f'{gone:.1f} s' if gone else 'not within 17 s'} after the kill; "
+                f"ps and lsof in t17-capture.txt")
     ctx.check(not left, f"2 seconds after kill -9, no control client from cmux remains ({left})")
     ctx.check(sorted(server.sessions()) == ["t17a", "t17b"], "every session is still running")
     ctx.h.app.current_env_label = "killed"
