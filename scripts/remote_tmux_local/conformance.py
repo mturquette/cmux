@@ -888,6 +888,11 @@ def t18_server_dies(ctx):
     notes_before_keys = {str(n.get("id") or json.dumps(n, sort_keys=True))
                          for n in ctx.h.cmux.result("notification.list").get("notifications") or []}
     children_before = child_pids(pid) if pid else set()
+    # So that "no new child" can be told apart from a sampler that sees nothing at all.
+    ctx.log(f"app pid {pid} has {len(children_before)} child process(es) before kill-server: "
+            + "; ".join(subprocess.run(["ps", "-o", "pid=,command=", "-p", str(c)], stdout=subprocess.PIPE,
+                                       stderr=subprocess.DEVNULL, text=True).stdout.strip()
+                        for c in sorted(children_before)))
     server.kill()
     killed_at = time.monotonic()
     try:
