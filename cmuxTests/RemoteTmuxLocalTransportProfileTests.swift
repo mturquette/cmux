@@ -415,6 +415,37 @@ import Testing
         #expect(unknown.contains("local"), "the unknown-transport message lists local among the choices")
     }
 
+    /// Anyone who can write to an ancestor directory can rename the user's own directory aside and
+    /// put theirs in its place, so every directory up to `/` has to be private or sticky.
+    @Test func boundaryRefusesASocketBelowADirectoryOthersCanWrite() throws {
+        let grandparent = "/tmp/cmux-lt-g-\(UUID().uuidString.prefix(8))"
+        try FileManager.default.createDirectory(atPath: grandparent, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: grandparent) }
+        try #require(chmod(grandparent, 0o777) == 0)
+        let parent = grandparent + "/me"
+        try FileManager.default.createDirectory(atPath: parent, withIntermediateDirectories: true)
+        try #require(chmod(parent, 0o700) == 0)
+        let descriptor = try Self.bindSocket(at: parent + "/s")
+        defer { Darwin.close(descriptor) }
+
+        #expect(throws: RemoteTmuxLocalServerSocket.Refusal.directoryNotPrivate(path: try Self.canonical(grandparent))) {
+            _ = try RemoteTmuxLocalServerSocket(validating: parent + "/s")
+        }
+    }
+
+    /// A socket that does not exist yet, in a directory others can write to, is reported as an
+    /// unsafe directory, not as "missing", so the CLI never starts a server there.
+    @Test func aMissingSocketInADirectoryOthersCanWriteIsNotMerelyMissing() throws {
+        let directory = "/tmp/cmux-lt-o-\(UUID().uuidString.prefix(8))"
+        try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: directory) }
+        try #require(chmod(directory, 0o777) == 0)
+
+        #expect(throws: RemoteTmuxLocalServerSocket.Refusal.directoryNotPrivate(path: try Self.canonical(directory))) {
+            _ = try RemoteTmuxLocalServerSocket(validating: directory + "/s")
+        }
+    }
+
     @Test func boundaryRefusesASymlinkToSomethingThatIsNotASocket() throws {
         let socket = try TemporarySocket()
         defer { socket.cleanUp() }
@@ -430,6 +461,24 @@ import Testing
     }
 
     // MARK: - Helpers
+
+    /// Binds a Unix socket at `path` and returns its descriptor, which the caller closes.
+    private static func bindSocket(at path: String) throws -> Int32 {
+        let descriptor = socket(AF_UNIX, SOCK_STREAM, 0)
+        try #require(descriptor >= 0)
+        var address = sockaddr_un()
+        address.sun_family = sa_family_t(AF_UNIX)
+        let bytes = Array(path.utf8)
+        try #require(bytes.count < MemoryLayout.size(ofValue: address.sun_path))
+        withUnsafeMutableBytes(of: &address.sun_path) { $0.copyBytes(from: bytes) }
+        let bound = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                bind(descriptor, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+            }
+        }
+        try #require(bound == 0, "bind failed: errno \(errno)")
+        return descriptor
+    }
 
     private static func canonical(_ path: String) throws -> String {
         let resolved = try #require(realpath(path, nil))
