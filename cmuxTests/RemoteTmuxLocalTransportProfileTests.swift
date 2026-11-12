@@ -382,14 +382,21 @@ import Testing
         }
     }
 
+    /// "Another user" is faked by asking the validator about a different user id. The socket sits
+    /// directly in `/private/tmp`, which is root-owned and sticky, so every directory on its path is
+    /// acceptable for any user, and the refusal is the socket's own owner.
     @Test func boundaryRefusesASocketOwnedByAnotherUser() throws {
-        let socket = try TemporarySocket()
-        defer { socket.cleanUp() }
+        let path = "/tmp/cmux-lt-u-\(UUID().uuidString.prefix(8))"
+        let descriptor = try Self.bindSocket(at: path)
+        defer {
+            Darwin.close(descriptor)
+            unlink(path)
+        }
         let result = TerminalController.remoteTmuxLocalHostResult(
-            from: ["transport": "local", "socket_path": socket.path],
+            from: ["transport": "local", "socket_path": path],
             userID: getuid() &+ 1
         )
-        #expect(result.failure == .notOwnedByUser(path: socket.canonicalPath))
+        #expect(result.failure == .notOwnedByUser(path: try Self.canonical(path)))
     }
 
     /// Another local user who can write to the socket's directory can rename their own server's
