@@ -293,6 +293,26 @@ attack_P2() {
       cat "$ARTIFACTS/P2-$label-oneshots.txt"
     done
   } >> "$summary"
+  # A server whose binary was deleted after it started, as `brew upgrade`
+  # does to the old version: what the pid lookups return, and whether the
+  # path still runs.
+  local copy="$ADV_TMP_ROOT/p2copy/bin/tmux" dsock dpid dcomm dtxt
+  mkdir -p "$(dirname "$copy")" && cp "$TMUX_OLD_BIN" "$copy"
+  dsock="$(new_server p2deleted "$copy")"
+  dpid="$("$TMUX_OLD_BIN" -S "$dsock" display-message -p '#{pid}' 2>/dev/null)"
+  rm -f "$copy"
+  dcomm="$(ps -o comm= -p "$dpid" 2>/dev/null)"
+  dtxt="$(lsof -a -p "$dpid" -d txt -Fn 2>/dev/null | sed -n 's/^n//p' | head -1)"
+  {
+    echo
+    echo "== server started from a binary that was then deleted"
+    echo "pid: $dpid"
+    echo "ps -o comm=: $dcomm"
+    echo "lsof txt: $dtxt"
+    echo "that path exists: $([ -e "$dtxt" ] && echo yes || echo no)"
+    echo "server still answers a 3.2a one-shot: $("$TMUX_OLD_BIN" -S "$dsock" display-message -p '#{version}' 2>&1)"
+  } >> "$summary"
+  "$TMUX_OLD_BIN" -S "$dsock" kill-server 2>/dev/null
   sed 's/^/    | /' "$summary"
   pass "probe completed (behavior recorded in P2-summary.txt)"
 }
@@ -1056,42 +1076,61 @@ attack_A15() {
 }
 
 # ---- A16: the socket path changes hands after the attach --------------------------
-# The boundary checks ownership when the RPC arrives. Here the mirrored
-# server's socket is moved aside (the server keeps running on its open
-# listening socket), another user's server is started at the same path, and
-# cmux's client is detached from outside, so the app reconnects to that path.
+# The boundary checks the socket when the RPC arrives, and again before each
+# spawn. Each case attaches through a path the boundary accepts (since the
+# review's S6 fix, a socket in a directory other users can write to is
+# refused up front; A22 covers that). Then our socket is moved aside (our
+# server keeps running on its open listening socket), another user's server
+# appears at the same path, and cmux's client is detached from outside, so
+# the app's reconnect spawns tmux against that path again.
+#   (a) a private (0700) directory, made writable by others after the attach
+#   (b) directly in root-owned, sticky /private/tmp: another user cannot
+#       rename our socket, but can create a new one at the name once ours
+#       is gone
+a16_case() {
+  local label="$1" sock="$2" after_attach="$3"
+  "$TMUX_BIN" -S "$sock" -f /dev/null new-session -d -s main || { fail "$label: could not start the server"; return; }
+  track_server "$sock"
+  run_bounded 30 mirror_rpc "$sock"
+  local ids; ids="$(workspace_ids_from "$RB_OUT")"
+  wait_until 10 has_control_client "$sock" || { fail "$label: mirror did not attach: $RB_OUT"; return; }
+  [ -n "$after_attach" ] && eval "$after_attach"
+  local moved="$sock.moved"
+  mv "$sock" "$moved"
+  track_server "$moved"
+  sudo -n -u nobody "$TMUX_BIN" -S "$sock" -f /dev/null new-session -d -s theirs 2>/dev/null
+  sudo -n chmod 777 "$sock" 2>/dev/null
+  if [ ! -S "$sock" ]; then skip "$label: could not start the other user's server at $sock"; return; fi
+  local c; c="$(t "$moved" list-clients -F '#{client_control_mode}:#{client_name}' | awk -F: '$1==1{print $2; exit}')"
+  t "$moved" detach-client -t "$c"
+  sleep 8
+  [ "$(sudo -n -u nobody "$TMUX_BIN" -S "$sock" list-clients 2>/dev/null | grep -c .)" -eq 0 ] \
+    && pass "$label: the reconnect never reached the other user's server" \
+    || fail "$label: after the socket changed hands, the app's reconnect attached to another user's server"
+  if wait_until 10 no_app_procs_for_socket "$sock"; then
+    pass "$label: no reconnect loop against the foreign socket"
+  else
+    fail "$label: the app keeps processes going against the foreign socket (reconnect loop?): $(app_procs_for_socket "$sock" | tr '\n' ';')"
+  fi
+  printf '%s: %s\n' "$label" "$(state_json "$sock" main | head -c 600)" >> "$ARTIFACTS/A16-state.txt"
+  sudo -n -u nobody "$TMUX_BIN" -S "$sock" kill-server 2>/dev/null
+  sudo -n rm -f "$sock" 2>/dev/null
+  local w; for w in $ids; do close_workspace "$w"; done
+  t "$moved" kill-server 2>/dev/null
+}
+
 attack_A16() {
   require_feature || return
   if ! sudo -n true 2>/dev/null; then
     skip "needs passwordless sudo to start another user's server"; return
   fi
   local dir="$ADV_TMP_ROOT/a16"
-  mkdir -p "$dir"; chmod 777 "$dir"   # writable by the other user, and not sticky
-  local sock="$dir/s"
-  "$TMUX_BIN" -S "$sock" -f /dev/null new-session -d -s main || { fail "could not start the server"; return; }
-  track_server "$sock"
-  run_bounded 30 mirror_rpc "$sock"
-  local ids; ids="$(workspace_ids_from "$RB_OUT")"
-  wait_until 10 has_control_client "$sock" || { fail "mirror did not attach"; return; }
-  mv "$sock" "$dir/s.moved"
-  track_server "$dir/s.moved"
-  sudo -n -u nobody "$TMUX_BIN" -S "$sock" -f /dev/null new-session -d -s theirs 2>/dev/null
-  sudo -n chmod 777 "$sock" 2>/dev/null
-  if [ ! -S "$sock" ]; then skip "could not start the other user's server"; return; fi
-  local c; c="$(t "$dir/s.moved" list-clients -F '#{client_control_mode}:#{client_name}' | awk -F: '$1==1{print $2; exit}')"
-  t "$dir/s.moved" detach-client -t "$c"
-  sleep 8
-  [ "$(sudo -n -u nobody "$TMUX_BIN" -S "$sock" list-clients 2>/dev/null | grep -c .)" -eq 0 ] \
-    && pass "the reconnect never reached the other user's server" \
-    || fail "after the socket changed hands, the app's reconnect attached to another user's server"
-  if wait_until 10 no_app_procs_for_socket "$sock"; then
-    pass "no reconnect loop against the foreign socket"
-  else
-    fail "the app keeps processes going against the foreign socket (reconnect loop?): $(app_procs_for_socket "$sock" | tr '\n' ';')"
-  fi
-  info "events: $(state_json "$sock" main | head -c 400)"
-  sudo -n -u nobody "$TMUX_BIN" -S "$sock" kill-server 2>/dev/null
-  local w; for w in $ids; do close_workspace "$w"; done
+  mkdir -p "$dir"; chmod 700 "$dir"
+  # The other user also needs to reach the directory: ADV_TMP_ROOT is 0700 by mktemp.
+  chmod 711 "$ADV_TMP_ROOT"
+  a16_case "private directory made shared" "$dir/s" "chmod 777 '$dir'"
+  chmod 700 "$dir"; chmod 700 "$ADV_TMP_ROOT"
+  a16_case "sticky /private/tmp" "/private/tmp/cmuxadv-a16.$$.s" ""
   assert_app_healthy
 }
 
@@ -1366,12 +1405,20 @@ print(panes[0].get("surface_id", "") if panes else "")
   if [ -z "$surface" ]; then
     fail "no surface found for the mirrored pane"
   else
+    # The drop RPC resolves surfaces only in the selected workspace of the
+    # active window (Q-A11), and the mirror was attached without focus, so
+    # select its workspace first. Track B's T8 does the same.
+    local first; first="$(printf '%s\n' $ids | head -1)"
+    run_bounded 10 cli workspace select --workspace "$first"
+    printf 'select(%s): %s\n' "$RB_STATUS" "$RB_OUT" > "$ARTIFACTS/A23.txt"
     local image="$ADV_TMP_ROOT/a23 paste me.png"
     python3 -I -c 'import base64, sys; open(sys.argv[1], "wb").write(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="))' "$image"
     local params
     params="$(python3 -I -c 'import json, sys; print(json.dumps({"surface_id": sys.argv[1], "paths": [sys.argv[2]], "route": "terminal", "payload": "image"}))' "$surface" "$image")"
     run_bounded 20 rpc debug.terminal.simulate_file_drop "$params"
-    printf 'drop(%s): %s\n' "$RB_STATUS" "$RB_OUT" > "$ARTIFACTS/A23.txt"
+    printf 'drop(%s): %s\n' "$RB_STATUS" "$RB_OUT" >> "$ARTIFACTS/A23.txt"
+    printf '%s' "$RB_OUT" | grep -qi 'not.found' \
+      && fail "the drop RPC still could not find the mirror pane's surface after selecting its workspace: $RB_OUT"
     sleep 4
     t "$sock" capture-pane -p -J -t main > "$ARTIFACTS/A23-pane.txt" 2>/dev/null
     [ ! -s "$calls" ] && pass "no ssh, scp or sftp ran for the paste" \
