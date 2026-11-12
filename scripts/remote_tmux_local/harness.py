@@ -387,7 +387,19 @@ class App:
         pids = self.pids()
         return pids[0] if pids else None
 
+    def launchd_label(self):
+        """The launchd job label check.sh's build-launch also uses for this tag's app."""
+        return f"local.vmc.app.{self.slug}"
+
+    def launchd_target(self):
+        return f"gui/{os.getuid()}/{self.launchd_label()}"
+
     def quit(self, sig=signal.SIGTERM, timeout=10.0):
+        # Unload the launchd job first (it also stops the app), then signal anything left.
+        # A job that has already exited stays loaded until booted out, and a new job with
+        # the same label cannot be bootstrapped while it is.
+        subprocess.run(["/bin/launchctl", "bootout", self.launchd_target()],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         pids = self.pids()
         for pid in pids:
             try:
@@ -416,8 +428,11 @@ class App:
         """Stops the running tagged app and starts it again with a controlled environment.
 
         The environment matches what reload.sh gives a tagged launch (an `env -i` base plus the
-        tag's socket settings), plus `extra_env`. Launching the executable directly keeps the app
-        a plain process the harness can find, signal and measure.
+        tag's socket settings), plus `extra_env`. The app runs as a one-shot launchd job (no
+        keep-alive), never as a child of this script: vm-check runs the harness inside the VM's
+        GUI tmux runner, and an app started from there counts that tmux as its responsible
+        process, which took the runner down when the app was quit or killed (Q-A9). The app is
+        still a plain process the harness can find, signal and measure.
         """
         if not self.executable or not os.access(self.executable, os.X_OK):
             raise CheckFailed(f"tagged app executable not found under {self.app_path}")
@@ -449,8 +464,18 @@ class App:
         log_path = os.path.join(self.artifacts, f"app-launch-{self.launch_count:02d}-{label}.log")
         with open(log_path, "ab") as log:
             log.write(("env: " + json.dumps(sorted(k for k in env)) + "\n").encode())
-            subprocess.Popen([self.executable], env=env, stdout=log, stderr=log,
-                             stdin=subprocess.DEVNULL, start_new_session=True)
+        # env -i in the job itself, as reload.sh does, because a launchd job otherwise
+        # inherits the GUI domain's environment on top of its own.
+        argv = ["/usr/bin/env", "-i"] + [f"{k}={v}" for k, v in sorted(env.items())] + [self.executable]
+        plist_path = os.path.join(self.artifacts, f"{self.launchd_label()}-{self.launch_count:02d}.plist")
+        with open(plist_path, "wb") as handle:
+            plistlib.dump({"Label": self.launchd_label(), "ProgramArguments": argv, "RunAtLoad": True,
+                           "KeepAlive": False, "ProcessType": "Interactive",
+                           "StandardOutPath": log_path, "StandardErrorPath": log_path}, handle)
+        boot = subprocess.run(["/bin/launchctl", "bootstrap", f"gui/{os.getuid()}", plist_path],
+                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        if boot.returncode != 0:
+            raise CheckFailed(f"launchctl bootstrap failed ({boot.returncode}): {boot.stdout.strip()}")
         wait_until(self.cmux.ping, timeout=90.0, interval=0.25, what=f"the tagged app ({label}) to answer on its socket")
         self.current_env_label = label
 
