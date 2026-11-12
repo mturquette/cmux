@@ -155,35 +155,66 @@ actor RemoteTmuxSSHTransport {
     }
 
     /// Makes sure the tmux client this transport will run is the build the running server runs,
-    /// for a transport that compares them (``RemoteTmuxTransportProfile/clientVersionMismatchError(server:client:)``).
+    /// for a transport that compares them (``RemoteTmuxTransportProfile/comparesClientRelease``).
     ///
     /// Nothing runs for ssh and et. With no server running there is nothing to compare.
     func assertClientMatchesServer() async throws {
-        guard comparesClientRelease else { return }
+        guard transportProfile.comparesClientRelease else { return }
         let serverProbe = try await tmuxServerVersionProbe()
         guard serverProbe.serverExists else { return }
         try await assertClientMatchesServer(release: serverProbe.release)
     }
 
-    /// Whether this transport's profile compares the client's release with the server's.
-    private var comparesClientRelease: Bool {
-        transportProfile.clientVersionMismatchError(server: "", client: "") != nil
-    }
-
-    /// While the server's own binary exists it is the client, so it matches by construction.
+    /// The client is the server's own binary when running it with `-V` prints the server's release.
+    /// That check, made once per server process, rules out a pid that now names another program
+    /// and a binary rebuilt in place as another release.
+    ///
     /// Otherwise the client is the resolver's tmux, which must be exactly the server's release:
     /// tmux 3.2a and 3.6a share protocol version 8, and control mode still fails between them.
     private func assertClientMatchesServer(release server: String?) async throws {
-        guard comparesClientRelease, transportProfile.serverTmuxExecutable(host: host) == nil else { return }
-        // The resolver's tmux, which is what the control stream runs when the server's binary is gone.
-        let result = try await runRemoteCommand(RemoteTmuxHost.tmuxRemoteCommand(arguments: ["-V"]))
+        guard transportProfile.comparesClientRelease else { return }
+        if let candidate = transportProfile.serverTmuxCandidate(host: host) {
+            if try await serverBinaryPrintsServerRelease(candidate, server: server) { return }
+        }
+        // The resolver's tmux, which is what the control stream runs without a checked server binary.
+        let resolved = try await runRemoteCommand(RemoteTmuxHost.tmuxResolutionProbeCommand)
+        guard resolved.succeeded else { throw commandFailure(resolved) }
+        let clientPath = resolved.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        let result = try await runRemoteCommand(Self.execCommand(clientPath, ["-V"]))
         guard result.succeeded else { throw commandFailure(result) }
         let client = RemoteTmuxLocalServerBinary.release(fromClientVersionOutput: result.stdout)
         if let server, let client, server == client { return }
         let unknown = RemoteTmuxError.unknownVersionDisplayName
-        if let refusal = transportProfile.clientVersionMismatchError(server: server ?? unknown, client: client ?? unknown) {
-            throw refusal
+        throw transportProfile.clientVersionMismatchError(
+            host: host, server: server ?? unknown, client: client ?? unknown, clientPath: clientPath)
+    }
+
+    /// Runs `candidate` once with `-V`, unless an earlier attach to the same server process already
+    /// did, and records whether it printed `server`.
+    private func serverBinaryPrintsServerRelease(
+        _ candidate: RemoteTmuxServerBinaryCandidate, server: String?
+    ) async throws -> Bool {
+        if let known = transportProfile.serverTmuxVerification(candidate) { return known }
+        // A file that is not tmux may fail, print anything, or run until the one-shot deadline.
+        // Each of those simply means it is not the server's binary.
+        let output: String?
+        do {
+            let result = try await runRemoteCommand(Self.execCommand(candidate.path, ["-V"]))
+            output = result.succeeded ? result.stdout : nil
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            output = nil
         }
+        let release = output.flatMap(RemoteTmuxLocalServerBinary.release(fromClientVersionOutput:))
+        let matches = server != nil && release == server
+        transportProfile.recordServerTmuxVerification(candidate, matchesServer: matches)
+        return matches
+    }
+
+    /// `exec '<path>' '<argument>'…`, with every word quoted for the shell.
+    private static func execCommand(_ path: String, _ arguments: [String]) -> String {
+        "exec " + ([path] + arguments).map(RemoteTmuxHost.shellSingleQuoted).joined(separator: " ")
     }
 
     private func assertSupportedTmuxVersion(_ version: RemoteTmuxVersion) throws {

@@ -324,6 +324,7 @@ final class RemoteTmuxViewConnection {
         if isStopped { return false }
         if !workspaces.isEmpty { return true }
         lastAttachStall = nil
+        lastStartFailure = nil
         let token = UUID()
         return await withCheckedContinuation { continuation in
             if isStopped {

@@ -913,10 +913,15 @@ final class RemoteTmuxControlConnection {
     /// attach block, which is what a tmux client of another release does against a server: it
     /// starts, prints nothing, and never exits. Without it, the attach waits for the caller's far
     /// longer deadline and then reports a generic failure.
+    ///
+    /// On a reconnect the limit counts the attempt as failed and lets the normal backoff retry,
+    /// instead of ending the connection: a mirror that was working (a Mac waking from sleep, say)
+    /// must not lose its workspace because one attempt was slow.
     private func armControlModeStartDeadline(generation: UInt64) {
         controlModeStartDeadlineTask?.cancel()
         controlModeStartDeadlineTask = nil
         guard let deadline = transportProfile.controlModeStartDeadline else { return }
+        let isReconnect = everReachedControlMode
         controlModeStartDeadlineTask = Task { @MainActor [weak self] in
             do {
                 try await ContinuousClock().sleep(for: deadline)
@@ -926,9 +931,19 @@ final class RemoteTmuxControlConnection {
             guard let self, self.processGeneration == generation, !self.attachBlockDrained,
                   self.connectionState != .ended
             else { return }
+            self.controlModeStartDeadlineTask = nil
+            if isReconnect {
+                self.record("control-mode-start-timeout-reconnect")
+                if self.connectionState == .connected {
+                    self.beginReconnecting(preservingBackoff: true)
+                } else {
+                    self.teardownProcessHandles()
+                    self.scheduleReconnectAttempt()
+                }
+                return
+            }
             self.record("control-mode-start-timeout")
             self.startFailure = self.transportProfile.controlModeStartTimeoutError(host: self.host)
-            self.controlModeStartDeadlineTask = nil
             self.connectionState = .ended
             self.cancelScheduledWork()
             self.teardownProcessHandles()
