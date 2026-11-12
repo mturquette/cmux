@@ -159,8 +159,12 @@ import Testing
         try script.write(toFile: client, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: client)
 
+        // A blocking open: it returns once the client opens the FIFO to write its report, and the
+        // read then ends when the client closes it.
         let reading = Task.detached { () -> String in
-            guard let handle = FileHandle(forReadingAtPath: report) else { return "" }
+            let descriptor = Darwin.open(report, O_RDONLY)
+            guard descriptor >= 0 else { return "open failed: errno \(errno)" }
+            let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
             return String(decoding: handle.readDataToEndOfFile(), as: UTF8.self)
         }
         let connection = RemoteTmuxControlConnection(
@@ -171,7 +175,8 @@ import Testing
         try connection.start()
         defer { connection.stop() }
 
-        #expect(await reading.value == "stdin-tty\nstdout-tty\nstderr-pipe\n")
+        let reported = await reading.value
+        #expect(reported == "stdin-tty\nstdout-tty\nstderr-pipe\n", "the client reported \(reported.debugDescription)")
     }
 
     // MARK: - Helpers
