@@ -293,6 +293,26 @@ attack_P2() {
       cat "$ARTIFACTS/P2-$label-oneshots.txt"
     done
   } >> "$summary"
+  # A server whose binary was deleted after it started, as `brew upgrade`
+  # does to the old version: what the pid lookups return, and whether the
+  # path still runs.
+  local copy="$ADV_TMP_ROOT/p2copy/bin/tmux" dsock dpid dcomm dtxt
+  mkdir -p "$(dirname "$copy")" && cp "$TMUX_OLD_BIN" "$copy"
+  dsock="$(new_server p2deleted "$copy")"
+  dpid="$("$TMUX_OLD_BIN" -S "$dsock" display-message -p '#{pid}' 2>/dev/null)"
+  rm -f "$copy"
+  dcomm="$(ps -o comm= -p "$dpid" 2>/dev/null)"
+  dtxt="$(lsof -a -p "$dpid" -d txt -Fn 2>/dev/null | sed -n 's/^n//p' | head -1)"
+  {
+    echo
+    echo "== server started from a binary that was then deleted"
+    echo "pid: $dpid"
+    echo "ps -o comm=: $dcomm"
+    echo "lsof txt: $dtxt"
+    echo "that path exists: $([ -e "$dtxt" ] && echo yes || echo no)"
+    echo "server still answers a 3.2a one-shot: $("$TMUX_OLD_BIN" -S "$dsock" display-message -p '#{version}' 2>&1)"
+  } >> "$summary"
+  "$TMUX_OLD_BIN" -S "$dsock" kill-server 2>/dev/null
   sed 's/^/    | /' "$summary"
   pass "probe completed (behavior recorded in P2-summary.txt)"
 }
