@@ -64,11 +64,13 @@ enum RemoteTmuxError: Error, Sendable, Equatable {
     /// tmux cmux would use instead is a different release. tmux control mode does not work
     /// across releases even when both report the same protocol version, so cmux refuses rather
     /// than start a client that never answers.
-    case localTmuxVersionsDiffer(server: String, client: String)
+    /// Carries both releases, the path of the tmux cmux found, and the server's socket, so the
+    /// message can name the exact command that ends this server and no other.
+    case localTmuxVersionsDiffer(server: String, client: String, clientPath: String, socketPath: String)
 
     /// The local tmux control client started but did not answer in control mode within the
-    /// transport's time limit, so cmux stopped it.
-    case localControlModeTimedOut
+    /// transport's time limit, so cmux stopped it. The server and its sessions are untouched.
+    case localControlModeTimedOut(seconds: Int)
 }
 
 extension RemoteTmuxError {
@@ -216,7 +218,7 @@ extension RemoteTmuxError {
                 ),
                 Self.sanitizedDetail(detail)
             )
-        case let .localTmuxVersionsDiffer(server, client):
+        case let .localTmuxVersionsDiffer(server, client, _, _):
             return String(
                 format: String(
                     localized: "remoteTmux.error.localVersionsDiffer",
@@ -224,7 +226,7 @@ extension RemoteTmuxError {
                 ),
                 Self.sanitizedDetail(server), Self.sanitizedDetail(client)
             )
-        case .localControlModeTimedOut:
+        case .localControlModeTimedOut(_):
             return String(
                 localized: "remoteTmux.error.localControlModeTimedOut",
                 defaultValue: "tmux on this Mac started but did not answer in control mode, so cmux stopped it. The tmux client and server may be different builds; restart the tmux server (tmux kill-server) and try again."

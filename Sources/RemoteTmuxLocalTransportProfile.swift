@@ -29,9 +29,12 @@ struct RemoteTmuxLocalTransportProfile: RemoteTmuxTransportProfile {
     /// Where a session the app creates starts. Injected so tests can use a temporary directory.
     let homeDirectory: String
 
-    /// Finds the running server's own binary from its socket path. Injected so tests can stand in
-    /// for a server, or for one whose binary is gone.
-    let serverExecutable: @Sendable (String) -> String?
+    /// Finds the running server's binary from its socket path. Injected so tests can stand in for
+    /// a server, for one whose binary is gone, or for a binary that is not the server's release.
+    let serverCandidate: @Sendable (String) -> RemoteTmuxServerBinaryCandidate?
+
+    /// What running each candidate with `-V` showed. Injected so each test starts empty.
+    let verifications: RemoteTmuxServerBinaryVerifications
 
     /// Variables set on every child on top of the app's environment. Tests use it to choose which
     /// tmux the resolver finds; the app passes none.
@@ -42,12 +45,16 @@ struct RemoteTmuxLocalTransportProfile: RemoteTmuxTransportProfile {
 
     init(
         homeDirectory: String,
-        serverExecutable: @escaping @Sendable (String) -> String? = { RemoteTmuxLocalServerBinary.executable(forSocket: $0) },
+        serverCandidate: @escaping @Sendable (String) -> RemoteTmuxServerBinaryCandidate? = {
+            RemoteTmuxLocalServerBinary().candidate(forSocket: $0)
+        },
+        verifications: RemoteTmuxServerBinaryVerifications = .shared,
         environmentOverrides: [String: String] = [:],
         controlModeStartDeadline: Duration = .seconds(5)
     ) {
         self.homeDirectory = homeDirectory
-        self.serverExecutable = serverExecutable
+        self.serverCandidate = serverCandidate
+        self.verifications = verifications
         self.environmentOverrides = environmentOverrides
         self.controlModeStartLimit = controlModeStartDeadline
     }
@@ -83,11 +90,29 @@ struct RemoteTmuxLocalTransportProfile: RemoteTmuxTransportProfile {
     /// Runs `$0` with the remaining arguments, unchanged.
     static let execScript = "exec \"$0\" \"$@\""
 
-    /// The running server's own binary; see ``RemoteTmuxLocalServerBinary``.
+    /// The running server's own binary, once running it with `-V` has shown the server's release;
+    /// see ``RemoteTmuxLocalServerBinary``.
     func serverTmuxExecutable(host: RemoteTmuxHost) -> String? {
-        guard let socket = host.serverSocketPath else { return nil }
-        return serverExecutable(socket)
+        guard let candidate = serverTmuxCandidate(host: host),
+              verifications.result(for: candidate) == true
+        else { return nil }
+        return candidate.path
     }
+
+    func serverTmuxCandidate(host: RemoteTmuxHost) -> RemoteTmuxServerBinaryCandidate? {
+        guard let socket = host.serverSocketPath else { return nil }
+        return serverCandidate(socket)
+    }
+
+    func serverTmuxVerification(_ candidate: RemoteTmuxServerBinaryCandidate) -> Bool? {
+        verifications.result(for: candidate)
+    }
+
+    func recordServerTmuxVerification(_ candidate: RemoteTmuxServerBinaryCandidate, matchesServer: Bool) {
+        verifications.record(candidate, matchesServer: matchesServer)
+    }
+
+    var comparesClientRelease: Bool { true }
 
     /// The server's own binary when it exists, otherwise the same resolver ssh uses.
     func tmuxOneShotCommand(host: RemoteTmuxHost, arguments: [String]) -> String {
@@ -98,8 +123,11 @@ struct RemoteTmuxLocalTransportProfile: RemoteTmuxTransportProfile {
         return "exec " + ([binary] + tmuxArguments).map(RemoteTmuxHost.shellSingleQuoted).joined(separator: " ")
     }
 
-    func clientVersionMismatchError(server: String, client: String) -> RemoteTmuxError? {
-        .localTmuxVersionsDiffer(server: server, client: client)
+    func clientVersionMismatchError(
+        host: RemoteTmuxHost, server: String, client: String, clientPath: String
+    ) -> RemoteTmuxError {
+        .localTmuxVersionsDiffer(
+            server: server, client: client, clientPath: clientPath, socketPath: host.serverSocketPath ?? "")
     }
 
     /// A local client answers its attach in milliseconds, so five seconds is generous, and short
@@ -107,7 +135,7 @@ struct RemoteTmuxLocalTransportProfile: RemoteTmuxTransportProfile {
     var controlModeStartDeadline: Duration? { controlModeStartLimit }
 
     func controlModeStartTimeoutError(host: RemoteTmuxHost) -> RemoteTmuxError {
-        .localControlModeTimedOut
+        .localControlModeTimedOut(seconds: Int(controlModeStartLimit.components.seconds))
     }
 
     /// `/bin/sh -c <command>`: the same resolver command ssh hands a remote shell, with the same

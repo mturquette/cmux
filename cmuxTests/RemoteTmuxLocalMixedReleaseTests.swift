@@ -26,9 +26,9 @@ struct RemoteTmuxLocalMixedReleaseTests {
         defer { server.stop() }
         let profile = server.profile(path: "\((Self.newTmux as NSString).deletingLastPathComponent):/usr/bin:/bin")
 
-        #expect(profile.serverTmuxExecutable(host: server.host) == (try Self.canonical(Self.oldTmux)))
         let sessions = try await server.transport(profile).discoverMirrorSessions(createIfEmpty: false)
         #expect(sessions.map(\.name) == ["main"])
+        #expect(profile.serverTmuxExecutable(host: server.host) == (try Self.canonical(Self.oldTmux)))
         #expect(try await server.mirrorPublishes(profile), "the 3.2a server did not mirror through its own binary")
     }
 
@@ -51,9 +51,25 @@ struct RemoteTmuxLocalMixedReleaseTests {
         defer { server.stop() }
         let profile = server.profile(path: "\((Self.newTmux as NSString).deletingLastPathComponent):/usr/bin:/bin")
 
-        await #expect(throws: RemoteTmuxError.localTmuxVersionsDiffer(server: "3.2a", client: "3.6a")) {
+        await #expect(throws: RemoteTmuxError.localTmuxVersionsDiffer(
+            server: "3.2a", client: "3.6a", clientPath: Self.newTmux, socketPath: server.socketPath)) {
             _ = try await server.transport(profile).discoverMirrorSessions(createIfEmpty: false)
         }
+    }
+
+    /// The server's binary was rebuilt in place as another release while the server ran, as
+    /// `make install` over the same path does. The kernel still names that path, but it now prints
+    /// 3.6a, so it is not used, and the 3.6a fallback is refused with the clear message.
+    @Test func aServerBinaryRebuiltInPlaceAsAnotherReleaseIsNotUsed() async throws {
+        let server = try TmuxServer(binary: Self.oldTmux, replacingBinaryAfterStartWith: Self.newTmux)
+        defer { server.stop() }
+        let profile = server.profile(path: "\((Self.newTmux as NSString).deletingLastPathComponent):/usr/bin:/bin")
+
+        await #expect(throws: RemoteTmuxError.localTmuxVersionsDiffer(
+            server: "3.2a", client: "3.6a", clientPath: Self.newTmux, socketPath: server.socketPath)) {
+            _ = try await server.transport(profile).discoverMirrorSessions(createIfEmpty: false)
+        }
+        #expect(profile.serverTmuxExecutable(host: server.host) == nil)
     }
 
     /// The backstop: a control client that never answers, here a 3.6a client against a 3.2a
@@ -75,7 +91,7 @@ struct RemoteTmuxLocalMixedReleaseTests {
 
         #expect(connected == false, "the hung client must end before the bound, not publish")
         #expect(ContinuousClock().now - start < .seconds(10))
-        #expect(connection.startFailure == .localControlModeTimedOut)
+        #expect(connection.startFailure == .localControlModeTimedOut(seconds: 2))
         #expect(connection.connectionState == .ended)
     }
 
@@ -89,13 +105,17 @@ struct RemoteTmuxLocalMixedReleaseTests {
         let host: RemoteTmuxHost
         private let killBinary: String
 
-        init(binary: String, deletingBinaryAfterStart: Bool = false) throws {
+        init(
+            binary: String,
+            deletingBinaryAfterStart: Bool = false,
+            replacingBinaryAfterStartWith replacement: String? = nil
+        ) throws {
             directory = "/tmp/cmux-mr-\(UUID().uuidString.prefix(8))"
             try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
             try #require(chmod(directory, 0o700) == 0)
             socketPath = try RemoteTmuxLocalMixedReleaseTests.canonical(directory) + "/s"
             var launched = binary
-            if deletingBinaryAfterStart {
+            if deletingBinaryAfterStart || replacement != nil {
                 launched = directory + "/copy/tmux"
                 try FileManager.default.createDirectory(
                     atPath: directory + "/copy", withIntermediateDirectories: true)
@@ -108,6 +128,11 @@ struct RemoteTmuxLocalMixedReleaseTests {
             if deletingBinaryAfterStart {
                 try FileManager.default.removeItem(atPath: directory + "/copy")
             }
+            if let replacement {
+                // Unlink and copy, as `make install` does, so the running server keeps its old text.
+                try FileManager.default.removeItem(atPath: launched)
+                try FileManager.default.copyItem(atPath: replacement, toPath: launched)
+            }
             host = RemoteTmuxHost.local(serverSocketPath: socketPath)
         }
 
@@ -116,6 +141,7 @@ struct RemoteTmuxLocalMixedReleaseTests {
         ) -> RemoteTmuxLocalTransportProfile {
             RemoteTmuxLocalTransportProfile(
                 homeDirectory: directory,
+                verifications: RemoteTmuxServerBinaryVerifications(),
                 environmentOverrides: ["PATH": path],
                 controlModeStartDeadline: controlModeStartDeadline
             )

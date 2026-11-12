@@ -244,25 +244,40 @@ protocol RemoteTmuxTransportProfile: Sendable {
     /// socket boundary keeps that wording out of a transport that has neither.
     func presentableError(_ error: RemoteTmuxError) -> RemoteTmuxError
 
-    /// The tmux binary the running server was started from, when the transport runs that binary as
-    /// its client. Defaults to nil: the remote shell's resolver picks tmux.
+    /// The tmux binary the running server was started from, once it has been checked, when the
+    /// transport runs that binary as its client. Defaults to nil: the resolver picks tmux.
     ///
     /// tmux control mode does not work between releases that share a protocol version (a 3.6a
     /// client against a 3.2a server answers nothing), so the local transport runs the server's
-    /// own binary whenever it still exists.
+    /// own binary whenever it still exists and prints the server's release.
     func serverTmuxExecutable(host: RemoteTmuxHost) -> String?
+
+    /// The binary the kernel says the running server was started from, before any check.
+    /// Defaults to nil.
+    func serverTmuxCandidate(host: RemoteTmuxHost) -> RemoteTmuxServerBinaryCandidate?
+
+    /// Whether `candidate` was run with `-V` and printed its server's release, or nil when it has
+    /// not been run yet.
+    func serverTmuxVerification(_ candidate: RemoteTmuxServerBinaryCandidate) -> Bool?
+
+    /// Records what running `candidate` with `-V` showed.
+    func recordServerTmuxVerification(_ candidate: RemoteTmuxServerBinaryCandidate, matchesServer: Bool)
 
     /// The shell command a one-shot runs for `tmux <arguments>`. Defaults to the tmux resolver
     /// with ``tmuxServerArguments(host:)`` in front.
     func tmuxOneShotCommand(host: RemoteTmuxHost, arguments: [String]) -> String
 
+    /// Whether the transport checks, before attaching, that the tmux client it will run is the
+    /// running server's exact release. Defaults to false, and then no extra process runs.
+    var comparesClientRelease: Bool { get }
+
     /// The refusal for a server of release `server` when the client cmux would run is release
-    /// `client`, or nil when the transport does not compare them. Defaults to nil.
+    /// `client`, found at `clientPath`. Used only when ``comparesClientRelease`` is true.
     ///
-    /// The transport compares only when ``serverTmuxExecutable(host:)`` is nil, because the
-    /// server's own binary is the server's release by construction. Releases are compared
-    /// exactly; the protocol version is not enough.
-    func clientVersionMismatchError(server: String, client: String) -> RemoteTmuxError?
+    /// Releases are compared exactly; the protocol version is not enough.
+    func clientVersionMismatchError(
+        host: RemoteTmuxHost, server: String, client: String, clientPath: String
+    ) -> RemoteTmuxError
 
     /// How long a spawned control client may take to answer its attach in control mode, or nil
     /// for no limit of the transport's own. Defaults to nil.
@@ -402,11 +417,23 @@ extension RemoteTmuxTransportProfile {
 
     func serverTmuxExecutable(host: RemoteTmuxHost) -> String? { nil }
 
+    func serverTmuxCandidate(host: RemoteTmuxHost) -> RemoteTmuxServerBinaryCandidate? { nil }
+
+    func serverTmuxVerification(_ candidate: RemoteTmuxServerBinaryCandidate) -> Bool? { nil }
+
+    func recordServerTmuxVerification(_ candidate: RemoteTmuxServerBinaryCandidate, matchesServer: Bool) {}
+
     func tmuxOneShotCommand(host: RemoteTmuxHost, arguments: [String]) -> String {
         RemoteTmuxHost.tmuxRemoteCommand(arguments: tmuxServerArguments(host: host) + arguments)
     }
 
-    func clientVersionMismatchError(server: String, client: String) -> RemoteTmuxError? { nil }
+    var comparesClientRelease: Bool { false }
+
+    func clientVersionMismatchError(
+        host: RemoteTmuxHost, server: String, client: String, clientPath: String
+    ) -> RemoteTmuxError {
+        .unsupportedTmux(detected: client)
+    }
 
     var controlModeStartDeadline: Duration? { nil }
 
