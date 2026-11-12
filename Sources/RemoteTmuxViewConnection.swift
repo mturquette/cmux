@@ -145,6 +145,8 @@ final class RemoteTmuxViewConnection {
     /// What the transport last said before control mode, latched for the same reason as the
     /// credential verdict: the connection is gone by the time the failure is reported.
     private(set) var lastTransportStartDetail: String?
+    /// The connection's ``RemoteTmuxControlConnection/startFailure``, latched the same way.
+    private(set) var lastStartFailure: RemoteTmuxError?
     /// How long an attach may stay quiet in each phase. A test shortens these.
     var attachQuietLimits = RemoteTmuxAttachProgress.QuietLimits.standard
     /// Fires after `workspaces` changes (the controller rebuilds cmux workspaces).
@@ -841,6 +843,7 @@ final class RemoteTmuxViewConnection {
         if let detail = connection.transportStartDetail, !connection.everReachedControlMode {
             lastTransportStartDetail = detail
         }
+        if let startFailure = connection.startFailure { lastStartFailure = startFailure }
         guard connection.isAwaitingCredentials else { return }
         onAwaitingCredentials?()
     }

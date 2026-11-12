@@ -645384,6 +645384,34 @@
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "此 Mac 上的 tmux 與正在執行的 tmux 伺服器版本不同，tmux 拒絕連接兩者（%@）" } }
       }
     },
+    "remoteTmux.error.localVersionsDiffer": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "the running tmux server is tmux %1$@, but its own tmux binary is gone and the tmux cmux found is tmux %2$@; tmux cannot mirror across versions. Restart the tmux server (tmux kill-server), or install tmux %1$@ where cmux finds tmux." } },
+        "ar": { "stringUnit": { "state": "translated", "value": "خادم tmux قيد التشغيل هو tmux %1$@، لكن ملفه التنفيذي لم يعد موجودًا، وtmux الذي وجده cmux هو tmux %2$@؛ لا يستطيع tmux النسخ المتطابق بين إصدارين مختلفين. أعد تشغيل خادم tmux (tmux kill-server)، أو ثبّت tmux %1$@ حيث يبحث cmux عن tmux." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Der laufende tmux-Server ist tmux %1$@, aber seine eigene tmux-Datei ist nicht mehr vorhanden, und das von cmux gefundene tmux ist tmux %2$@; tmux kann nicht über Versionen hinweg spiegeln. Starte den tmux-Server neu (tmux kill-server) oder installiere tmux %1$@ dort, wo cmux tmux findet." } },
+        "es": { "stringUnit": { "state": "translated", "value": "el servidor tmux en ejecución es tmux %1$@, pero su propio binario de tmux ya no existe y el tmux que encontró cmux es tmux %2$@; tmux no puede reflejar entre versiones distintas. Reinicia el servidor tmux (tmux kill-server) o instala tmux %1$@ donde cmux busca tmux." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "le serveur tmux en cours est tmux %1$@, mais son propre binaire tmux n’existe plus et le tmux trouvé par cmux est tmux %2$@ ; tmux ne peut pas faire de miroir entre versions. Redémarrez le serveur tmux (tmux kill-server) ou installez tmux %1$@ là où cmux cherche tmux." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "実行中の tmux サーバーは tmux %1$@ ですが、そのサーバー自身の tmux バイナリがなくなっており、cmux が見つけた tmux は tmux %2$@ です。tmux はバージョンをまたいでミラーできません。tmux サーバーを再起動する (tmux kill-server) か、cmux が tmux を探す場所に tmux %1$@ をインストールしてください。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "실행 중인 tmux 서버는 tmux %1$@이지만 서버 자체의 tmux 바이너리가 없어졌고, cmux가 찾은 tmux는 tmux %2$@입니다. tmux는 서로 다른 버전 사이에서 미러링할 수 없습니다. tmux 서버를 다시 시작하거나(tmux kill-server) cmux가 tmux를 찾는 위치에 tmux %1$@을 설치하세요." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "正在运行的 tmux 服务器是 tmux %1$@，但它自己的 tmux 可执行文件已不存在，而 cmux 找到的 tmux 是 tmux %2$@；tmux 无法跨版本镜像。请重启 tmux 服务器（tmux kill-server），或在 cmux 查找 tmux 的位置安装 tmux %1$@。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "正在執行的 tmux 伺服器是 tmux %1$@，但它自己的 tmux 執行檔已不存在，而 cmux 找到的 tmux 是 tmux %2$@；tmux 無法跨版本鏡像。請重新啟動 tmux 伺服器（tmux kill-server），或在 cmux 尋找 tmux 的位置安裝 tmux %1$@。" } }
+      }
+    },
+    "remoteTmux.error.localControlModeTimedOut": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "tmux on this Mac started but did not answer in control mode, so cmux stopped it. The tmux client and server may be different builds; restart the tmux server (tmux kill-server) and try again." } },
+        "ar": { "stringUnit": { "state": "translated", "value": "بدأ tmux على جهاز Mac هذا لكنه لم يستجب في وضع التحكم، فأوقفه cmux. قد يكون عميل tmux وخادمه من إصدارين مختلفين؛ أعد تشغيل خادم tmux (tmux kill-server) ثم حاول مرة أخرى." } },
+        "de": { "stringUnit": { "state": "translated", "value": "tmux auf diesem Mac wurde gestartet, hat im Steuermodus aber nicht geantwortet, daher hat cmux es beendet. tmux-Client und -Server sind möglicherweise unterschiedliche Builds; starte den tmux-Server neu (tmux kill-server) und versuche es erneut." } },
+        "es": { "stringUnit": { "state": "translated", "value": "tmux se inició en este Mac pero no respondió en modo de control, así que cmux lo detuvo. Puede que el cliente y el servidor de tmux sean compilaciones distintas; reinicia el servidor tmux (tmux kill-server) y vuelve a intentarlo." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "tmux a démarré sur ce Mac mais n’a pas répondu en mode contrôle, donc cmux l’a arrêté. Le client et le serveur tmux sont peut-être des builds différents ; redémarrez le serveur tmux (tmux kill-server) puis réessayez." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "この Mac の tmux は起動しましたがコントロールモードで応答しなかったため、cmux が停止しました。tmux のクライアントとサーバーのビルドが異なる可能性があります。tmux サーバーを再起動して (tmux kill-server) もう一度お試しください。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "이 Mac의 tmux가 시작되었지만 제어 모드에서 응답하지 않아 cmux가 중지했습니다. tmux 클라이언트와 서버의 빌드가 다를 수 있습니다. tmux 서버를 다시 시작한 뒤(tmux kill-server) 다시 시도하세요." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "此 Mac 上的 tmux 已启动，但没有在控制模式下响应，因此 cmux 停止了它。tmux 客户端和服务器可能是不同的构建版本；请重启 tmux 服务器（tmux kill-server）后重试。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "此 Mac 上的 tmux 已啟動，但沒有在控制模式下回應，因此 cmux 停止了它。tmux 用戶端和伺服器可能是不同的建置版本；請重新啟動 tmux 伺服器（tmux kill-server）後再試一次。" } }
+      }
+    },
     "remoteTmux.error.localTmuxTimedOut": {
       "extractionState": "manual",
       "localizations": {

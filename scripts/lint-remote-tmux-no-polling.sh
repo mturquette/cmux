@@ -82,6 +82,8 @@ ALLOW=(
   "Backstop for a stream that has stopped answering; tmux's own %exit ends the wait and cancels it"
   "Sources/RemoteTmuxSSHTransport.swift:runOneShotBeforeDeadline:try await ContinuousClock().sleep(for: deadline)"
   "Deadline arm racing one local tmux command; the command finishing first cancels it. A client facing a stopped server has no edge to wait on."
+  "Sources/RemoteTmuxControlConnection.swift:armControlModeStartDeadline:try await ContinuousClock().sleep(for: deadline)"
+  "Deadline arm racing the attach block of one spawn; the attach block or a teardown cancels it. A tmux client of another release prints nothing and never exits, so it has no edge to wait on."
   "Sources/RemoteTmuxControlConnection.swift:terminateProcessTree:try? await Task.sleep(nanoseconds: 2_000_000_000)"
   "SIGKILL escalation after SIGTERM. The edge would be 'the process handled the signal', and a process that IGNORES SIGTERM emits nothing at all — the absence of an exit is only observable by giving it a moment and looking again."
   "Sources/RemoteTmuxViewConnection.swift:wait:private var timer: DispatchSourceTimer?"

@@ -59,6 +59,16 @@ enum RemoteTmuxError: Error, Sendable, Equatable {
     /// The tmux client cmux found and the running server are different versions, which tmux
     /// refuses to connect. Carries tmux's own message.
     case localTmuxVersionMismatch(String)
+
+    /// The running server's own tmux binary is gone (usually after a package upgrade), and the
+    /// tmux cmux would use instead is a different release. tmux control mode does not work
+    /// across releases even when both report the same protocol version, so cmux refuses rather
+    /// than start a client that never answers.
+    case localTmuxVersionsDiffer(server: String, client: String)
+
+    /// The local tmux control client started but did not answer in control mode within the
+    /// transport's time limit, so cmux stopped it.
+    case localControlModeTimedOut
 }
 
 extension RemoteTmuxError {
@@ -205,6 +215,19 @@ extension RemoteTmuxError {
                     defaultValue: "the tmux on this Mac is a different version from the running tmux server, and tmux refuses to connect them (%@)"
                 ),
                 Self.sanitizedDetail(detail)
+            )
+        case let .localTmuxVersionsDiffer(server, client):
+            return String(
+                format: String(
+                    localized: "remoteTmux.error.localVersionsDiffer",
+                    defaultValue: "the running tmux server is tmux %1$@, but its own tmux binary is gone and the tmux cmux found is tmux %2$@; tmux cannot mirror across versions. Restart the tmux server (tmux kill-server), or install tmux %1$@ where cmux finds tmux."
+                ),
+                Self.sanitizedDetail(server), Self.sanitizedDetail(client)
+            )
+        case .localControlModeTimedOut:
+            return String(
+                localized: "remoteTmux.error.localControlModeTimedOut",
+                defaultValue: "tmux on this Mac started but did not answer in control mode, so cmux stopped it. The tmux client and server may be different builds; restart the tmux server (tmux kill-server) and try again."
             )
         }
     }

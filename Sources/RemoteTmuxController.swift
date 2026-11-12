@@ -203,6 +203,7 @@ final class RemoteTmuxController {
         guard await connection.waitUntilConnected() else {
             stopCachedConnectionIfCurrent(connection, host: host, sessionName: sessionName)
             try Task.checkCancellation()
+            if let startFailure = connection.startFailure { throw startFailure }
             throw RemoteTmuxError.unreachable("tmux control stream ended before attach for \(host.destination)")
         }
         return nil

@@ -330,6 +330,17 @@ the parser, the mirrors or the reconnect rules:
   stays a pipe so failure classification is unchanged.
 - **Teardown is a detach.** `remoteHalfSurvivesLocalExit` is false: killing the client closes
   its pty, so closing a mirror workspace leaves the session running, as for ssh.
+- **The client is the server's own build.** tmux control mode fails between releases that
+  share a protocol version: a 3.6a client against a 3.2a server (both protocol 8) prints
+  nothing and never exits. So `serverTmuxExecutable(host:)` finds the running server's binary
+  from its socket (`LOCAL_PEERPID` and `LOCAL_PEERCRED` on a connection, then `proc_pidpath`),
+  and the control stream and every one-shot run that binary while it exists. When it is gone,
+  usually after `brew upgrade` removed the release the server still runs, the resolver's tmux
+  is used only if its `tmux -V` release equals the server's `#{version}` exactly; otherwise the
+  attach is refused with a message naming both releases
+  (`clientVersionMismatchError(server:client:)`). A control client that has not answered its
+  attach within `controlModeStartDeadline` (5 seconds) is stopped with its own error, as a
+  backstop. ssh and et set none of these.
 
 ## Order of work
 

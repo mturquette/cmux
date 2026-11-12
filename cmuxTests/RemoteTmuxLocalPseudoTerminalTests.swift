@@ -10,7 +10,10 @@ import Testing
 
 /// The pty a local tmux control client runs on: every descriptor is close-on-exec, and the slave
 /// is raw, so the control stream reaches the parser byte for byte with nothing echoed back.
-@Suite struct RemoteTmuxLocalPseudoTerminalTests {
+///
+/// Serialized because the descriptor checks scan every descriptor in the process by terminal
+/// name, and a pty opened by a parallel test could reuse a name another test just freed.
+@Suite(.serialized) struct RemoteTmuxLocalPseudoTerminalTests {
     @Test func everyDescriptorIsCloseOnExec() throws {
         let pty = try RemoteTmuxLocalPseudoTerminal()
         defer { Self.closeAll(pty) }
@@ -180,14 +183,71 @@ import Testing
         #expect(Self.descriptorsOpen(onSlave: slave) == 0, "the app must not keep the client's slave")
         #expect(Self.mastersOpen(forSlave: slave) > 0, "the app holds the master while the client runs")
 
+        // The master is closed from each reader's queue once its stream finishes; the readers
+        // report that close, so the test waits for exactly that event.
+        let readers = connection.outputReadersForTesting
+        #expect(readers.count == 2)
         connection.stop()
-        // The master is closed from the reader's queue once its stream finishes, which has no edge
-        // the test can wait on, so this waits up to two seconds for that one close.
-        let deadline = ContinuousClock().now + .seconds(2)
-        while Self.mastersOpen(forSlave: slave) > 0, ContinuousClock().now < deadline {
-            try await Task.sleep(for: .milliseconds(20))
+        let closed = await Self.within(.seconds(10)) {
+            for reader in readers { await reader.waitUntilDescriptorClosed() }
+            return true
         }
+        #expect(closed == true, "the readers never closed their descriptors")
         #expect(Self.mastersOpen(forSlave: slave) == 0, "stop() must close the master")
+    }
+
+    /// The backstop for a control client that starts and never answers, which is what a tmux
+    /// client of another release does against a server: the connection ends at the transport's
+    /// time limit with its own error, instead of waiting for the caller's much longer deadline.
+    @MainActor
+    @Test func aClientThatNeverAnswersEndsAtTheControlModeTimeLimit() async throws {
+        let directory = NSTemporaryDirectory() + "remote-tmux-start-limit-\(UUID().uuidString)"
+        try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: directory) }
+        let client = try Self.writeScript(at: directory + "/client", body: "exec sleep 30")
+        let connection = RemoteTmuxControlConnection(
+            host: RemoteTmuxHost.local(serverSocketPath: directory + "/no-server"),
+            sessionName: "s",
+            transportProfile: OwnedPtyProfile(executable: client, controlModeStartDeadline: .milliseconds(300))
+        )
+        let start = ContinuousClock().now
+
+        try connection.start()
+        defer { connection.stop() }
+        let connected = await Self.within(.seconds(10)) { await connection.waitUntilConnected() }
+
+        #expect(connected == false)
+        #expect(ContinuousClock().now - start < .seconds(5))
+        #expect(connection.startFailure == .localControlModeTimedOut)
+        #expect(connection.connectionState == .ended)
+    }
+
+    /// A client that enters control mode and answers its attach block in time keeps running after
+    /// its time limit has passed. The wait past the limit is fixed, because what is checked is that
+    /// nothing happens.
+    @MainActor
+    @Test func aClientThatAnswersInTimeIsNotStopped() async throws {
+        let directory = NSTemporaryDirectory() + "remote-tmux-start-limit-\(UUID().uuidString)"
+        try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: directory) }
+        let client = try Self.writeScript(at: directory + "/client", body: """
+        printf '\\033P1000p%%begin 1 1 0\\n%%end 1 1 0\\n'
+        exec sleep 30
+        """)
+        let connection = RemoteTmuxControlConnection(
+            host: RemoteTmuxHost.local(serverSocketPath: directory + "/no-server"),
+            sessionName: "s",
+            transportProfile: OwnedPtyProfile(executable: client, controlModeStartDeadline: .milliseconds(300))
+        )
+
+        try connection.start()
+        defer { connection.stop() }
+        let connected = await Self.within(.seconds(10)) { await connection.waitUntilConnected() }
+        try await Task.sleep(for: .milliseconds(800))
+
+        #expect(connected == true)
+        #expect(connection.startFailure == nil)
+        #expect(connection.connectionState == .connected)
     }
 
     /// A reconnect re-checks the socket. When the path has been replaced by something that is not
@@ -261,8 +321,10 @@ import Testing
     private struct OwnedPtyProfile: RemoteTmuxTransportProfile {
         let executable: String
         var checksLocalSocket = false
+        var controlModeStartDeadline: Duration?
 
         func executablePath() -> String { executable }
+        func controlModeStartTimeoutError(host: RemoteTmuxHost) -> RemoteTmuxError { .localControlModeTimedOut }
         func controlStreamArgv(
             host: RemoteTmuxHost, sessionName: String, mode: RemoteTmuxControlAttachMode
         ) -> [String] { [] }
@@ -313,12 +375,31 @@ import Testing
     }
 
     /// How many of this process's descriptors are pty masters whose slave is `path`.
+    ///
+    /// `ptsname_r`, not `ptsname`, whose result lives in one static buffer other threads share.
     private static func mastersOpen(forSlave path: String) -> Int {
         var count = 0
+        var buffer = [CChar](repeating: 0, count: 128)
         for descriptor in 0..<getdtablesize() where fcntl(descriptor, F_GETFD) >= 0 {
-            if let name = ptsname(descriptor), String(cString: name) == path { count += 1 }
+            if ptsname_r(descriptor, &buffer, buffer.count) == 0, String(cString: buffer) == path { count += 1 }
         }
         return count
+    }
+
+    /// The value of `body`, or nil when it has not finished after `limit`.
+    @MainActor
+    private static func within<T: Sendable>(
+        _ limit: Duration, _ body: @escaping @MainActor @Sendable () async -> T
+    ) async -> T? {
+        await withTaskGroup(of: T?.self) { group in
+            group.addTask { await body() }
+            group.addTask {
+                try? await ContinuousClock().sleep(for: limit)
+                return nil
+            }
+            defer { group.cancelAll() }
+            return await group.next() ?? nil
+        }
     }
 
     /// Binds a Unix socket at `path` and returns its descriptor, which the caller closes.
