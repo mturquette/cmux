@@ -179,12 +179,17 @@ actor RemoteTmuxSSHTransport {
         // The resolver's tmux, which is what the control stream runs without a checked server binary.
         let resolved = try await runRemoteCommand(RemoteTmuxHost.tmuxResolutionProbeCommand)
         guard resolved.succeeded else { throw commandFailure(resolved) }
-        let clientPath = resolved.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-        let result = try await runRemoteCommand(Self.execCommand(clientPath, ["-V"]))
-        guard result.succeeded else { throw commandFailure(result) }
-        let client = RemoteTmuxLocalServerBinary.release(fromClientVersionOutput: result.stdout)
-        if let server, let client, server == client { return }
         let unknown = RemoteTmuxError.unknownVersionDisplayName
+        // Everything below comes from binaries cmux does not trust and may reach the user's
+        // terminal through the CLI, so only a plain path and a release-shaped version are kept.
+        guard let clientPath = RemoteTmuxLocalServerBinary.displayablePath(resolved.stdout) else {
+            throw transportProfile.clientVersionMismatchError(
+                host: host, server: server ?? unknown, client: unknown, clientPath: unknown)
+        }
+        let result = try await runRemoteCommand(Self.execCommand(clientPath, ["-V"]))
+        let client = result.succeeded
+            ? RemoteTmuxLocalServerBinary.release(fromClientVersionOutput: result.stdout) : nil
+        if let server, let client, server == client { return }
         throw transportProfile.clientVersionMismatchError(
             host: host, server: server ?? unknown, client: client ?? unknown, clientPath: clientPath)
     }

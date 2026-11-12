@@ -987,7 +987,24 @@ final class RemoteTmuxController {
         // It runs after every teardown path below (multiplexed, kept open, or closed). The window
         // is looked up first, while the dying workspace still names it.
         let noticeManager = reason == .sessionEnded ? AppDelegate.shared?.tabManagerFor(tabId: workspaceId) : nil
+        // A connection that gave up reconnecting says why, and the user would otherwise see the
+        // workspace vanish while its session is still running. Read before the mirror is removed.
+        let endFailure = reason == .sessionEnded
+            ? (sessionMirrors[Self.connectionKey(host: host, sessionName: sessionName)]?.connection
+                as? RemoteTmuxControlConnection)?.startFailure
+            : nil
         defer {
+            if let noticeManager, let endFailure,
+               let tabId = noticeManager.selectedTabId ?? noticeManager.tabs.first?.id {
+                AppDelegate.shared?.notificationStore?.addNotification(
+                    tabId: tabId,
+                    surfaceId: nil,
+                    title: String(localized: "remoteTmux.mirrorEnded.title", defaultValue: "tmux mirror ended"),
+                    subtitle: sessionName,
+                    body: host.transportProfile.presentableError(endFailure).message,
+                    correlationKey: "remote-tmux-mirror-ended-\(host.connectionHash)-\(sessionName)"
+                )
+            }
             if let noticeManager, !hostHasLiveMirror(host),
                let notice = host.transportProfile.stoppedServerNotice(host: host),
                let tabId = noticeManager.selectedTabId ?? noticeManager.tabs.first?.id {

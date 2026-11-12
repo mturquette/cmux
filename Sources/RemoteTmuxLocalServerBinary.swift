@@ -85,8 +85,7 @@ struct RemoteTmuxLocalServerBinary: Sendable {
               let file = RemoteTmuxServerBinaryCandidate.FileIdentity.of(path: path)
         else { return nil }
         let startTime = Int64(process.pbi_start_tvsec) * 1_000_000 + Int64(process.pbi_start_tvusec)
-        _ = file  // Red stub: the file is not part of the key yet.
-        return RemoteTmuxServerBinaryCandidate(path: path, processID: pid, startTime: startTime)
+        return RemoteTmuxServerBinaryCandidate(path: path, processID: pid, startTime: startTime, file: file)
     }
 
     /// The pid of the process listening on `socketPath`, when it runs as ``userID``.
@@ -139,18 +138,33 @@ struct RemoteTmuxLocalServerBinary: Sendable {
     static func release(fromClientVersionOutput output: String) -> String? {
         let words = output.split(whereSeparator: \.isWhitespace)
         guard words.count == 2, words[0] == "tmux" else { return nil }
-        return String(words[1])
+        return releaseShaped(String(words[1]))
     }
 
     /// The release in the server's `#{version}` answer: `3.2a\n` gives `3.2a`.
     static func release(fromServerVersionOutput output: String) -> String? {
-        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
+        releaseShaped(output.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
-    /// Red stub: returns the text as it came.
+    /// `text` when it has the shape of a tmux release, otherwise nil.
+    ///
+    /// The text comes from a binary cmux does not trust, and the release ends up in a message the
+    /// CLI prints to the user's terminal, so only a strict shape is let through: up to four digits,
+    /// a dot, up to four digits and an optional letter (`3.2a`), with an optional `-rc` suffix or
+    /// `next-` prefix, or `master`. Anything else is shown as unknown.
+    static func releaseShaped(_ text: String) -> String? {
+        let release = /(?:next-)?[0-9]{1,4}\.[0-9]{1,4}[a-z]?(?:-rc[0-9]{0,2})?|master/
+        return text.wholeMatch(of: release) != nil ? text : nil
+    }
+
+    /// The path a resolver printed, when it is one absolute line with nothing hidden in it, so it
+    /// can be quoted in a message. Otherwise nil.
     static func displayablePath(_ output: String) -> String? {
-        output.trimmingCharacters(in: .whitespacesAndNewlines)
+        let path = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard path.hasPrefix("/"), path.utf8.count <= 1024,
+              !RemoteTmuxLocalServerSocket.hasHiddenCharacter(path)
+        else { return nil }
+        return path
     }
 }
 

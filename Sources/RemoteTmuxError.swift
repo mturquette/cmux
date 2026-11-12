@@ -86,6 +86,12 @@ extension RemoteTmuxError {
         return false
     }
 
+    /// Whether this is the refusal for a tmux client of another release than the server's.
+    var isClientReleaseRefusal: Bool {
+        if case .localTmuxVersionsDiffer = self { return true }
+        return false
+    }
+
     static var unknownVersionDisplayName: String {
         String(localized: "remoteTmux.version.unknown", defaultValue: "unknown")
     }
