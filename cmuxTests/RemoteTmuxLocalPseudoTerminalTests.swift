@@ -218,7 +218,7 @@ import Testing
 
         #expect(connected == false)
         #expect(ContinuousClock().now - start < .seconds(5))
-        #expect(connection.startFailure == .localControlModeTimedOut)
+        #expect(connection.startFailure == .localControlModeTimedOut(seconds: 0))
         #expect(connection.connectionState == .ended)
     }
 
@@ -248,6 +248,58 @@ import Testing
         #expect(connected == true)
         #expect(connection.startFailure == nil)
         #expect(connection.connectionState == .connected)
+    }
+
+    /// The time limit must not end a mirror that is reconnecting, after the Mac wakes from sleep
+    /// for example. A reconnect whose client misses the limit counts as one failed attempt, and
+    /// the next attempt, which answers, brings the mirror back.
+    @MainActor
+    @Test func aSlowReconnectIsRetriedAndTheMirrorSurvives() async throws {
+        let directory = NSTemporaryDirectory() + "remote-tmux-slow-reconnect-\(UUID().uuidString)"
+        try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: directory) }
+        let spawns = directory + "/spawns"
+        // The first client answers and then exits, so the stream ends after control mode and the
+        // connection reconnects. The second never answers. The third answers and stays.
+        let client = try Self.writeScript(at: directory + "/client", body: """
+        n=$(( $(cat '\(spawns)' 2>/dev/null || echo 0) + 1 ))
+        echo "$n" > '\(spawns)'
+        case "$n" in
+          1) printf '\\033P1000p%%begin 1 1 0\\n%%end 1 1 0\\n'; exec sleep 0.3 ;;
+          2) exec sleep 30 ;;
+          *) printf '\\033P1000p%%begin 1 1 0\\n%%end 1 1 0\\n'; exec sleep 30 ;;
+        esac
+        """)
+        let connection = RemoteTmuxControlConnection(
+            host: RemoteTmuxHost.local(serverSocketPath: directory + "/no-server"),
+            sessionName: "s",
+            transportProfile: OwnedPtyProfile(executable: client, controlModeStartDeadline: .milliseconds(300))
+        )
+        let outcome = ReconnectOutcome()
+        let survived = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+            outcome.continuation = continuation
+            connection.addObserver(
+                onExit: { outcome.finish(false) },
+                onConnectionStateChanged: { state in
+                    if state == .connected, Self.storedCount(spawns) >= 3 { outcome.finish(true) }
+                }
+            )
+            do {
+                try connection.start()
+            } catch {
+                outcome.finish(false)
+                return
+            }
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(20))
+                outcome.finish(false)
+            }
+        }
+        defer { connection.stop() }
+
+        #expect(survived, "the mirror ended instead of retrying the slow reconnect (\(Self.storedCount(spawns)) spawns)")
+        #expect(connection.startFailure == nil)
+        #expect(Self.storedCount(spawns) == 3)
     }
 
     /// A reconnect re-checks the socket. When the path has been replaced by something that is not
@@ -324,7 +376,7 @@ import Testing
         var controlModeStartDeadline: Duration?
 
         func executablePath() -> String { executable }
-        func controlModeStartTimeoutError(host: RemoteTmuxHost) -> RemoteTmuxError { .localControlModeTimedOut }
+        func controlModeStartTimeoutError(host: RemoteTmuxHost) -> RemoteTmuxError { .localControlModeTimedOut(seconds: 0) }
         func controlStreamArgv(
             host: RemoteTmuxHost, sessionName: String, mode: RemoteTmuxControlAttachMode
         ) -> [String] { [] }
@@ -338,6 +390,12 @@ import Testing
             guard checksLocalSocket else { return nil }
             return RemoteTmuxLocalTransportProfile(homeDirectory: "/").refusalBeforeSpawn(host: host)
         }
+    }
+
+    /// The number a client script stored in `path`, or 0 before the first one ran.
+    private static func storedCount(_ path: String) -> Int {
+        Int(((try? String(contentsOfFile: path, encoding: .utf8)) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
     }
 
     private static func writeScript(at path: String, body: String) throws -> String {

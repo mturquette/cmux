@@ -414,6 +414,13 @@ struct RemoteTmuxHost: Sendable, Equatable, Identifiable {
     /// Stable stderr marker the resolver emits with exit 127 when no tmux binary is usable.
     static let tmuxNotFoundSentinel = RemoteTmuxCommandBuilder.notFoundSentinel
 
+    /// A shell command that prints the path of the tmux the resolver would run, or fails with
+    /// ``tmuxNotFoundSentinel``.
+    static var tmuxResolutionProbeCommand: String {
+        RemoteExecutableCommandBuilder(executableName: "tmux", notFoundSentinel: tmuxNotFoundSentinel)
+            .resolutionProbeShellCommand
+    }
+
     /// Returns a non-empty tmux control-mode command argument, or `nil` when the
     /// value could break the line-oriented control stream. Shell quoting is not
     /// enough here: CR/LF/control bytes can terminate a `rename-*` command line
