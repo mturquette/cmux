@@ -218,18 +218,22 @@ extension RemoteTmuxError {
                 ),
                 Self.sanitizedDetail(detail)
             )
-        case let .localTmuxVersionsDiffer(server, client, _, _):
+        case let .localTmuxVersionsDiffer(server, client, clientPath, socketPath):
             return String(
                 format: String(
                     localized: "remoteTmux.error.localVersionsDiffer",
-                    defaultValue: "the running tmux server is tmux %1$@, but its own tmux binary is gone and the tmux cmux found is tmux %2$@; tmux cannot mirror across versions. Restart the tmux server (tmux kill-server), or install tmux %1$@ where cmux finds tmux."
+                    defaultValue: "the tmux server at %1$@ runs tmux %2$@, but its own tmux binary is gone, and the tmux cmux found, %3$@, is tmux %4$@. tmux cannot mirror across versions. To mirror this server, install tmux %2$@ in place of %3$@, or end the server with tmux -S %1$@ kill-server (this closes every session on it, with every program running in them) and start it again."
                 ),
-                Self.sanitizedDetail(server), Self.sanitizedDetail(client)
+                Self.sanitizedDetail(socketPath), Self.sanitizedDetail(server),
+                Self.sanitizedDetail(clientPath), Self.sanitizedDetail(client)
             )
-        case .localControlModeTimedOut(_):
+        case let .localControlModeTimedOut(seconds):
             return String(
-                localized: "remoteTmux.error.localControlModeTimedOut",
-                defaultValue: "tmux on this Mac started but did not answer in control mode, so cmux stopped it. The tmux client and server may be different builds; restart the tmux server (tmux kill-server) and try again."
+                format: String(
+                    localized: "remoteTmux.error.localControlModeTimedOut",
+                    defaultValue: "tmux on this Mac did not answer within %@ seconds, so cmux stopped its client. The session is still running; try again."
+                ),
+                String(seconds)
             )
         }
     }

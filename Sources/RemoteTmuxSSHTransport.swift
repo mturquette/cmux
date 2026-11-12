@@ -195,11 +195,6 @@ actor RemoteTmuxSSHTransport {
         _ candidate: RemoteTmuxServerBinaryCandidate, server: String?
     ) async throws -> Bool {
         if let known = transportProfile.serverTmuxVerification(candidate) { return known }
-        // Red stub: trusts the kernel's path without running it, as before.
-        if Bool(true) {
-            transportProfile.recordServerTmuxVerification(candidate, matchesServer: true)
-            return true
-        }
         // A file that is not tmux may fail, print anything, or run until the one-shot deadline.
         // Each of those simply means it is not the server's binary.
         let output: String?
