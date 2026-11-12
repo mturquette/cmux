@@ -203,6 +203,7 @@ final class RemoteTmuxController {
         guard await connection.waitUntilConnected() else {
             stopCachedConnectionIfCurrent(connection, host: host, sessionName: sessionName)
             try Task.checkCancellation()
+            if let startFailure = connection.startFailure { throw startFailure }
             throw RemoteTmuxError.unreachable("tmux control stream ended before attach for \(host.destination)")
         }
         return nil
@@ -853,6 +854,9 @@ final class RemoteTmuxController {
     func remoteUploadTarget(forSurfaceId surfaceId: UUID) -> TerminalRemoteUploadTarget? {
         for sessionMirror in sessionMirrors.values
         where !sessionMirror.connection.exited && sessionMirror.ownsSurface(surfaceId) {
+            // A local mirror's panes read this Mac's files directly, so the pasted file needs
+            // no upload, and the normal local-path insertion runs instead (an idea from #8421).
+            guard sessionMirror.host.transportProfile.pastedFilesNeedUpload else { return nil }
             return .detectedSSH(sessionMirror.host.detectedSSHSession())
         }
         return nil
@@ -978,6 +982,29 @@ final class RemoteTmuxController {
         workspaceId: UUID,
         reason: RemoteTmuxMirrorTeardownReason
     ) {
+        // When the server behind a mirror stops, its workspaces end without anything the user did,
+        // so the transport may post one notice for the whole server once its last mirror is gone.
+        // It runs after every teardown path below (multiplexed, kept open, or closed). The window
+        // is looked up first, while the dying workspace still names it.
+        let noticeManager = reason == .sessionEnded ? AppDelegate.shared?.tabManagerFor(tabId: workspaceId) : nil
+        defer {
+            if let noticeManager, !hostHasLiveMirror(host),
+               let notice = host.transportProfile.stoppedServerNotice(host: host),
+               let tabId = noticeManager.selectedTabId ?? noticeManager.tabs.first?.id {
+                // The store needs a workspace to hold the notice; the one left selected in the
+                // mirror's window is the closest to where the mirror was.
+                AppDelegate.shared?.notificationStore?.addNotification(
+                    tabId: tabId,
+                    surfaceId: nil,
+                    title: notice.title,
+                    subtitle: host.destination,
+                    body: notice.body,
+                    // Without a key the store keeps one entry per workspace, and this notice would
+                    // replace whatever else that workspace was showing.
+                    correlationKey: "remote-tmux-server-stopped-\(host.connectionHash)"
+                )
+            }
+        }
         let key = Self.connectionKey(host: host, sessionName: sessionName)
         // Multiplexed teardown: release the channel only. The shared stream and
         // ControlMaster belong to the host's view — tearing them down here would

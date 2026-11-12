@@ -8616,6 +8616,8 @@ struct CMUXCLI {
                 client: client,
                 jsonOutput: jsonOutput
             )
+        case "tmux-mirror":
+            try runTmuxMirror(commandArgs: commandArgs, client: client, jsonOutput: jsonOutput)
         case "local-tmux", "tmux":
             try runLocalTmuxCommand(
                 commandArgs: commandArgs,
@@ -22333,6 +22335,8 @@ struct CMUXCLI {
             return Self.moshCommandUsage
         case "mosh-tmux":
             return Self.moshTmuxCommandUsage
+        case "tmux-mirror":
+            return TmuxMirrorInvocation.usage
         case "ssh-tmux":
             let help = String(localized: "cli.help.ssh-tmux", defaultValue: """
             Usage: cmux ssh-tmux <destination> [--port <n>] [--identity <path>] [--name <title>]

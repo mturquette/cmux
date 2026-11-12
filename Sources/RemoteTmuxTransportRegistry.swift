@@ -10,6 +10,9 @@ enum RemoteTmuxTransportKind: String, Sendable, Equatable, CaseIterable {
     /// EternalTerminal: keeps its session across a network change, and is spawned under a pty
     /// (see ``RemoteTmuxTransportProfile/requiresPseudoTerminal`` for what that does and does not buy).
     case et
+    /// tmux on this Mac, reached through its server socket under a pty cmux owns. No ssh is
+    /// involved; see ``RemoteTmuxLocalTransportProfile``.
+    case local
 
     /// Parses a user-supplied value, rejecting anything unrecognized.
     static func parse(_ raw: String?) -> RemoteTmuxTransportKind? {
@@ -26,6 +29,9 @@ enum RemoteTmuxTransportKind: String, Sendable, Equatable, CaseIterable {
         switch self {
         case .ssh: return configured ?? 22
         case .et: return configured ?? 2022
+        // A local server is named by its socket path, not a port. Zero keeps the value total
+        // without pretending one exists; the boundary refuses `transport_port` for local hosts.
+        case .local: return 0
         }
     }
 
@@ -36,7 +42,7 @@ enum RemoteTmuxTransportKind: String, Sendable, Equatable, CaseIterable {
     /// specific route.
     var usesTransportBroker: Bool {
         switch self {
-        case .ssh: return false
+        case .ssh, .local: return false
         case .et: return true
         }
     }
@@ -48,7 +54,7 @@ enum RemoteTmuxTransportKind: String, Sendable, Equatable, CaseIterable {
     /// without making the host model grow another transport-specific property.
     var supportsTransportHelperPath: Bool {
         switch self {
-        case .ssh: return false
+        case .ssh, .local: return false
         case .et: return true
         }
     }
@@ -82,6 +88,11 @@ enum RemoteTmuxTransportKind: String, Sendable, Equatable, CaseIterable {
                 // `brokeredArgvPutsBrokerFlagsFirstAndDropsEndpointFlags`.
                 remoteTerminalPath: transportHelperPath,
                 broker: broker
+            )
+        case .local:
+            // The server socket travels on the host, which every argv call receives.
+            return RemoteTmuxLocalTransportProfile(
+                homeDirectory: FileManager.default.homeDirectoryForCurrentUser.path
             )
         }
     }
@@ -159,6 +170,109 @@ protocol RemoteTmuxTransportProfile: Sendable {
 
     /// argv for a one-shot remote command (discovery, mutations).
     func oneShotArgv(host: RemoteTmuxHost, remoteCommand: String) -> [String]
+
+    /// The binary that runs one-shot commands, given ``oneShotArgv(host:remoteCommand:)``.
+    ///
+    /// Separate from ``executablePath()`` because the two can differ: et carries its control stream
+    /// itself but sends discovery and mutations over ssh. Defaults to ssh, so a profile that does
+    /// not override it keeps today's one-shot path.
+    func oneShotExecutablePath() -> String
+
+    /// Whether this transport's one-shots ride the host's shared ssh ControlMaster.
+    ///
+    /// When true, ``RemoteTmuxSSHTransport`` creates the control-socket directory, warms the master
+    /// before an attach burst, and closes it on teardown. A transport that never connects through
+    /// ssh has no master, so those steps are skipped rather than run against a socket that will
+    /// never exist. Defaults to true, which is what ssh and et need.
+    var usesSharedControlMaster: Bool { get }
+
+    /// tmux arguments that select the server, placed before every tmux command this host runs.
+    ///
+    /// Empty by default, which leaves the choice to the remote tmux. A transport that names its
+    /// server explicitly returns it here, so a one-shot and the control stream cannot reach
+    /// different servers.
+    func tmuxServerArguments(host: RemoteTmuxHost) -> [String]
+
+    /// The environment one-shot commands run with, given the app's own, or nil to inherit it
+    /// unchanged. Defaults to nil.
+    func oneShotEnvironment(inheriting base: [String: String]) -> [String: String]?
+
+    /// How the control stream gets its terminal. Defaults to the `script(1)` wrapper when
+    /// ``requiresPseudoTerminal`` is true, and to plain pipes otherwise.
+    var pseudoTerminal: RemoteTmuxPseudoTerminalKind { get }
+
+    /// Extra `new-session` arguments for a session the app itself creates. Defaults to none.
+    func appCreatedSessionArguments() -> [String]
+
+    /// The error a whole-server mirror raises when the server has no sessions, or nil to start one.
+    ///
+    /// ssh and et start a session on an empty remote server, as they always have (nil). The local
+    /// transport refuses instead: the CLI starts the first session from the user's shell, with its
+    /// environment and working directory, and a session the app started would get neither.
+    func emptyServerRefusal(host: RemoteTmuxHost) -> RemoteTmuxError?
+
+    /// Why spawning a process for `host` must not happen now, or nil to go ahead.
+    ///
+    /// Checked before every control-stream spawn, reconnects included, and before every
+    /// one-shot, so a check made once at the socket boundary cannot go stale. Defaults to nil.
+    func refusalBeforeSpawn(host: RemoteTmuxHost) -> RemoteTmuxError?
+
+    /// The notice to post when the last mirror of `host` has ended, or nil for none.
+    ///
+    /// Defaults to nil, which keeps ssh and et as they are. The local transport posts one when
+    /// the server itself has stopped, so a mirror whose server died does not vanish silently.
+    func stoppedServerNotice(host: RemoteTmuxHost) -> (title: String, body: String)?
+
+    /// Whether a file pasted into a mirror pane has to be uploaded to the host first.
+    ///
+    /// True for ssh and et, whose panes run on another machine. The local transport's panes run
+    /// on this Mac and read the file where it is, so it reports false.
+    var pastedFilesNeedUpload: Bool { get }
+
+    /// The longest a one-shot command may run, or nil for no limit of cmux's own.
+    ///
+    /// nil for ssh and et, whose ssh options already bound a dead connection. The local
+    /// transport sets one, because a tmux client facing a stopped server never returns.
+    var oneShotDeadline: Duration? { get }
+
+    /// The error a one-shot that missed ``oneShotDeadline`` reports.
+    func oneShotTimeoutError(host: RemoteTmuxHost) -> RemoteTmuxError
+
+    /// `error` reworded for this transport before it reaches the user. Defaults to `error`.
+    ///
+    /// The shared code words its failures for a remote host reached over ssh. One mapping at the
+    /// socket boundary keeps that wording out of a transport that has neither.
+    func presentableError(_ error: RemoteTmuxError) -> RemoteTmuxError
+
+    /// The tmux binary the running server was started from, when the transport runs that binary as
+    /// its client. Defaults to nil: the remote shell's resolver picks tmux.
+    ///
+    /// tmux control mode does not work between releases that share a protocol version (a 3.6a
+    /// client against a 3.2a server answers nothing), so the local transport runs the server's
+    /// own binary whenever it still exists.
+    func serverTmuxExecutable(host: RemoteTmuxHost) -> String?
+
+    /// The shell command a one-shot runs for `tmux <arguments>`. Defaults to the tmux resolver
+    /// with ``tmuxServerArguments(host:)`` in front.
+    func tmuxOneShotCommand(host: RemoteTmuxHost, arguments: [String]) -> String
+
+    /// The refusal for a server of release `server` when the client cmux would run is release
+    /// `client`, or nil when the transport does not compare them. Defaults to nil.
+    ///
+    /// The transport compares only when ``serverTmuxExecutable(host:)`` is nil, because the
+    /// server's own binary is the server's release by construction. Releases are compared
+    /// exactly; the protocol version is not enough.
+    func clientVersionMismatchError(server: String, client: String) -> RemoteTmuxError?
+
+    /// How long a spawned control client may take to answer its attach in control mode, or nil
+    /// for no limit of the transport's own. Defaults to nil.
+    ///
+    /// The backstop for a client that starts and then says nothing, which no version check can
+    /// rule out entirely.
+    var controlModeStartDeadline: Duration? { get }
+
+    /// The error a control client that missed ``controlModeStartDeadline`` ends with.
+    func controlModeStartTimeoutError(host: RemoteTmuxHost) -> RemoteTmuxError
 
     /// Whether the transport needs a pseudo-terminal rather than pipes.
     ///
@@ -249,6 +363,67 @@ extension RemoteTmuxTransportProfile {
 
     /// cmux's own ssh invocation is the default shape.
     var authenticationIsSSHShaped: Bool { true }
+
+    /// One-shots go over ssh unless a profile says otherwise.
+    func oneShotExecutablePath() -> String { RemoteTmuxHost.defaultSSHExecutablePath() }
+
+    /// ssh and et both send one-shots through the shared master.
+    var usesSharedControlMaster: Bool { true }
+
+    /// The remote tmux picks its own server.
+    func tmuxServerArguments(host: RemoteTmuxHost) -> [String] { [] }
+
+    /// One-shots inherit the app's environment unchanged.
+    func oneShotEnvironment(inheriting base: [String: String]) -> [String: String]? { nil }
+
+    var pseudoTerminal: RemoteTmuxPseudoTerminalKind {
+        requiresPseudoTerminal ? .scriptWrapper : .none
+    }
+
+    func appCreatedSessionArguments() -> [String] { [] }
+
+    /// A remote server with no sessions gets one, as before.
+    func emptyServerRefusal(host: RemoteTmuxHost) -> RemoteTmuxError? { nil }
+
+    func refusalBeforeSpawn(host: RemoteTmuxHost) -> RemoteTmuxError? { nil }
+
+    func stoppedServerNotice(host: RemoteTmuxHost) -> (title: String, body: String)? { nil }
+
+    /// A remote pane cannot read this Mac's files.
+    var pastedFilesNeedUpload: Bool { true }
+
+    var oneShotDeadline: Duration? { nil }
+
+    func oneShotTimeoutError(host: RemoteTmuxHost) -> RemoteTmuxError {
+        .unreachable(host.destination)
+    }
+
+    func presentableError(_ error: RemoteTmuxError) -> RemoteTmuxError { error }
+
+    func serverTmuxExecutable(host: RemoteTmuxHost) -> String? { nil }
+
+    func tmuxOneShotCommand(host: RemoteTmuxHost, arguments: [String]) -> String {
+        RemoteTmuxHost.tmuxRemoteCommand(arguments: tmuxServerArguments(host: host) + arguments)
+    }
+
+    func clientVersionMismatchError(server: String, client: String) -> RemoteTmuxError? { nil }
+
+    var controlModeStartDeadline: Duration? { nil }
+
+    func controlModeStartTimeoutError(host: RemoteTmuxHost) -> RemoteTmuxError {
+        .unreachable(host.destination)
+    }
+}
+
+/// How a transport's control stream gets a terminal.
+enum RemoteTmuxPseudoTerminalKind: Sendable, Equatable {
+    /// Plain pipes, which is all ssh needs.
+    case none
+    /// `/usr/bin/script` allocates the pty (see ``RemoteTmuxPseudoTerminal``).
+    case scriptWrapper
+    /// cmux allocates the pty itself (see ``RemoteTmuxLocalPseudoTerminal``), so the client is
+    /// hung up the moment cmux dies.
+    case owned
 }
 
 /// What end-of-stream on the control connection means.

@@ -304,6 +304,44 @@ to `\r\n` on the way back. cmux already runs `ssh -tt` (also a remote PTY) so
 `RemoteTmuxControlStreamParser` tolerates `\r` today. Keep an explicit test for it rather
 than rediscovering it after a transport swap.
 
+## The local transport
+
+`cmux tmux-mirror` mirrors a tmux server on the same Mac through a third profile,
+`RemoteTmuxLocalTransportProfile` (`transport: "local"`). It uses the seam without changing
+the parser, the mirrors or the reconnect rules:
+
+- **Identity is the socket.** A local host carries one field, an absolute, canonical
+  `serverSocketPath`, and its `connectionHash` is derived from a `local` tag plus that path.
+  The CLI resolves the path from the calling shell (`$TMUX` inside tmux, otherwise
+  `TMUX_TMPDIR`, `--socket-name` or `--socket-path`), because the app never sees that
+  shell's environment. The socket boundary refuses a path that is relative, has hidden or
+  control characters, is not a socket, or belongs to another user, and refuses `host`,
+  `port`, `identity_file`, `transport_port`, `transport_broker` and `transport_helper_path`.
+- **Every tmux command names the server.** `tmuxServerArguments(host:)` puts `-S <socket>`
+  in front of the control stream and every one-shot, and the children run without `TMUX`,
+  `TMUX_PANE` and `TMUX_TMPDIR`, so the app's own environment cannot redirect either one.
+- **No ssh.** One-shots run `/bin/sh -c <resolver>` with the same resolver and quoting ssh
+  sends a remote shell, so Homebrew and MacPorts tmux are found from a GUI app's PATH.
+  `usesSharedControlMaster` is false, which turns the ControlMaster steps into no-ops.
+- **An owned pty.** tmux control mode needs a terminal, so the client runs on a pty cmux
+  allocates itself (`RemoteTmuxLocalPseudoTerminal`, chosen by `pseudoTerminal == .owned`). When
+  cmux dies the master closes and tmux drops the client at once; under `script(1)` it stayed
+  attached until the pane next printed. All three descriptors are close-on-exec, and stderr
+  stays a pipe so failure classification is unchanged.
+- **Teardown is a detach.** `remoteHalfSurvivesLocalExit` is false: killing the client closes
+  its pty, so closing a mirror workspace leaves the session running, as for ssh.
+- **The client is the server's own build.** tmux control mode fails between releases that
+  share a protocol version: a 3.6a client against a 3.2a server (both protocol 8) prints
+  nothing and never exits. So `serverTmuxExecutable(host:)` finds the running server's binary
+  from its socket (`LOCAL_PEERPID` and `LOCAL_PEERCRED` on a connection, then `proc_pidpath`),
+  and the control stream and every one-shot run that binary while it exists. When it is gone,
+  usually after `brew upgrade` removed the release the server still runs, the resolver's tmux
+  is used only if its `tmux -V` release equals the server's `#{version}` exactly; otherwise the
+  attach is refused with a message naming both releases
+  (`clientVersionMismatchError(server:client:)`). A control client that has not answered its
+  attach within `controlModeStartDeadline` (5 seconds) is stopped with its own error, as a
+  backstop. ssh and et set none of these.
+
 ## Order of work
 
 1. Fix the reconnect classifier so an auth-required reconnect surfaces the interactive path

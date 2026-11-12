@@ -27,7 +27,7 @@ extension TerminalController {
             }
             return v2Error(id: id, code: "invalid_params", message: String(localized: "socket.remoteTmux.hostRequired", defaultValue: "host is required"))
         }
-        return v2VmCall(id: id, timeoutSeconds: 30) {
+        return remoteTmuxCall(id: id, host: host, timeoutSeconds: 30) {
             guard let controller = await MainActor.run(body: { AppDelegate.shared?.remoteTmuxController })
             else {
                 throw RemoteTmuxError.unreachable("app not ready")
@@ -67,6 +67,10 @@ extension TerminalController {
             RemoteTmuxBrokerSnapshot.shared.select(requestedName: $0)
         }
     ) -> RemoteTmuxHost? {
+        // A local server is named by its socket, not a destination: see remoteTmuxLocalHostResult.
+        if RemoteTmuxTransportKind.parse(params["transport"] as? String) == .local {
+            return try? remoteTmuxLocalHostResult(from: params).get()
+        }
         guard let destination = (params["host"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines),
             !destination.isEmpty,
@@ -145,8 +149,14 @@ extension TerminalController {
         if let requested = params["transport"] as? String, RemoteTmuxTransportKind.parse(requested) == nil {
             return String(
                 localized: "socket.remoteTmux.transportUnknown",
-                defaultValue: "transport is not one cmux knows; use ssh or et"
+                defaultValue: "transport is not one cmux knows; use ssh, et or local"
             )
+        }
+        if RemoteTmuxTransportKind.parse(params["transport"] as? String) == .local {
+            if case let .failure(refusal) = remoteTmuxLocalHostResult(from: params) {
+                return refusal.message
+            }
+            return nil
         }
         if let transportPort = params["transport_port"] as? Int, !(1...65535).contains(transportPort) {
             return String(
@@ -258,7 +268,7 @@ extension TerminalController {
         ) else {
             return v2Error(id: id, code: "invalid_params", message: String(localized: "socket.remoteTmux.sessionRequired", defaultValue: "session is required"))
         }
-        return v2VmCall(id: id, timeoutSeconds: 60) {
+        return remoteTmuxCall(id: id, host: host, timeoutSeconds: 60) {
             guard let controller = await MainActor.run(body: { AppDelegate.shared?.remoteTmuxController }) else {
                 throw RemoteTmuxError.unreachable("app not ready")
             }
@@ -306,7 +316,7 @@ extension TerminalController {
             return v2Error(id: id, code: "invalid_params", message: String(localized: "socket.remoteTmux.sessionRequired", defaultValue: "session is required"))
         }
         let routing = remoteTmuxRouting(from: params)
-        return v2VmCall(id: id, timeoutSeconds: RemoteTmuxController.attachSocketTimeoutSeconds) {
+        return remoteTmuxCall(id: id, host: host, timeoutSeconds: RemoteTmuxController.attachSocketTimeoutSeconds) {
             guard let controller = await MainActor.run(body: { AppDelegate.shared?.remoteTmuxController })
             else {
                 throw RemoteTmuxError.unreachable("app not ready")
@@ -361,7 +371,7 @@ extension TerminalController {
         if params["session"] != nil, sessionName == nil {
             return v2Error(id: id, code: "invalid_params", message: String(localized: "socket.remoteTmux.sessionRequired", defaultValue: "session is required"))
         }
-        return v2VmCall(id: id, timeoutSeconds: RemoteTmuxController.attachSocketTimeoutSeconds) {
+        return remoteTmuxCall(id: id, host: host, timeoutSeconds: RemoteTmuxController.attachSocketTimeoutSeconds) {
             guard let controller = await MainActor.run(body: { AppDelegate.shared?.remoteTmuxController })
             else {
                 throw RemoteTmuxError.unreachable("app not ready")
@@ -448,7 +458,7 @@ extension TerminalController {
             }
             return v2Error(id: id, code: "invalid_params", message: String(localized: "socket.remoteTmux.hostAndSessionRequired", defaultValue: "host and session are required"))
         }
-        return v2VmCall(id: id, timeoutSeconds: 10) {
+        return remoteTmuxCall(id: id, host: host, timeoutSeconds: 10) {
             try await MainActor.run {
                 guard let controller = AppDelegate.shared?.remoteTmuxController else {
                     throw RemoteTmuxError.unreachable("app not ready")
@@ -477,7 +487,7 @@ extension TerminalController {
             }
             return v2Error(id: id, code: "invalid_params", message: String(localized: "socket.remoteTmux.hostAndSessionRequired", defaultValue: "host and session are required"))
         }
-        return v2VmCall(id: id, timeoutSeconds: 10) {
+        return remoteTmuxCall(id: id, host: host, timeoutSeconds: 10) {
             let snapshot: RemoteTmuxControlConnection.Snapshot? = await MainActor.run {
                 AppDelegate.shared?.remoteTmuxController
                     .connection(host: host, sessionName: session)?
@@ -531,7 +541,7 @@ extension TerminalController {
             }
             return v2Error(id: id, code: "invalid_params", message: String(localized: "socket.remoteTmux.hostRequired", defaultValue: "host is required"))
         }
-        return v2VmCall(id: id, timeoutSeconds: 10) {
+        return remoteTmuxCall(id: id, host: host, timeoutSeconds: 10) {
             let report: (progress: RemoteTmuxAttachProgress, limits: RemoteTmuxAttachProgress.QuietLimits)? =
                 await MainActor.run {
                     guard let view = AppDelegate.shared?.remoteTmuxController
@@ -583,7 +593,7 @@ extension TerminalController {
             }
             return v2Error(id: id, code: "invalid_params", message: String(localized: "socket.remoteTmux.hostAndSessionRequired", defaultValue: "host and session are required"))
         }
-        return v2VmCall(id: id, timeoutSeconds: 10) {
+        return remoteTmuxCall(id: id, host: host, timeoutSeconds: 10) {
             let entries: [[String: Any]]? = await MainActor.run {
                 guard let mirror = AppDelegate.shared?.remoteTmuxController
                     .sessionMirror(host: host, sessionName: session) else { return nil }
@@ -625,7 +635,7 @@ extension TerminalController {
             }
             return v2Error(id: id, code: "invalid_params", message: String(localized: "socket.remoteTmux.hostAndSessionRequired", defaultValue: "host and session are required"))
         }
-        return v2VmCall(id: id, timeoutSeconds: 10) {
+        return remoteTmuxCall(id: id, host: host, timeoutSeconds: 10) {
             let snapshots: [RemoteTmuxWindowMirror.SizingSnapshot]? = await MainActor.run {
                 AppDelegate.shared?.remoteTmuxController
                     .sessionMirror(host: host, sessionName: session)?

@@ -204,6 +204,12 @@ final class RemoteTmuxControlConnection {
     private var stdoutReader: FileHandle?
     private var stdoutPipeReader: RemoteTmuxProcessOutputReader?
     private var stderrPipeReader: RemoteTmuxProcessOutputReader?
+    #if DEBUG
+    /// The current spawn's output readers, so a test can wait for their descriptors to close.
+    var outputReadersForTesting: [RemoteTmuxProcessOutputReader] {
+        [stdoutPipeReader, stderrPipeReader].compactMap { $0 }
+    }
+    #endif
     /// Consumes the current spawn's stderr into `stderrBuffer`. Awaited before a
     /// failed reconnect attempt is classified, so the decision sees the complete
     /// error rather than racing the async stderr delivery.
@@ -309,6 +315,12 @@ final class RemoteTmuxControlConnection {
     /// result slot stolen by the attach block. Reset per spawn (each ssh re-attach
     /// produces a fresh attach block).
     private var attachBlockDrained = false
+    /// Why the connection ended before its client answered in control mode, when the
+    /// transport's own time limit (``RemoteTmuxTransportProfile/controlModeStartDeadline``)
+    /// stopped it. The attach reports this instead of a generic failure.
+    private(set) var startFailure: RemoteTmuxError?
+    /// The pending time limit on the current spawn's control-mode start, if the transport sets one.
+    var controlModeStartDeadlineTask: Task<Void, Never>?
     /// How the initial attach opens the session. Reconnects always use `.attach`; see
     /// ``spawnProcess(mode:)``.
     let attachMode: RemoteTmuxControlAttachMode
@@ -618,7 +630,9 @@ final class RemoteTmuxControlConnection {
     /// Spawns the SSH `tmux -CC` process and begins streaming.
     func start() throws {
         guard !started else { return }
-        try host.ensureControlSocketDirectory()
+        if transportProfile.usesSharedControlMaster {
+            try host.ensureControlSocketDirectory()
+        }
         // The initial connect honors the caller's mode; reconnects never create.
         try spawnProcess(mode: attachMode)
         started = true
@@ -733,6 +747,11 @@ final class RemoteTmuxControlConnection {
             throw RemoteTmuxError.launchFailed(detail)
         }
 
+        if let refusal = transportProfile.refusalBeforeSpawn(host: host) {
+            record("transport-refused-before-spawn")
+            stderrBuffer.append(refusal.message + "\n")
+            throw refusal
+        }
         let proc = Process()
         let transportExecutable = transportProfile.executablePath()
         // The last gate before this string becomes a process. Everything upstream validates its own
@@ -756,7 +775,21 @@ final class RemoteTmuxControlConnection {
             sessionName: sessionName,
             mode: mode
         )
-        if transportProfile.requiresPseudoTerminal {
+        // A pty cmux owns, so the kernel hangs the client up the moment cmux dies.
+        // See RemoteTmuxLocalPseudoTerminal for the measurement behind it.
+        let ownedPseudoTerminal: RemoteTmuxLocalPseudoTerminal?
+        if transportProfile.pseudoTerminal == .owned {
+            record("transport-owned-pty")
+            do {
+                ownedPseudoTerminal = try RemoteTmuxLocalPseudoTerminal()
+            } catch {
+                stderrBuffer.append("\(error)\n")
+                throw RemoteTmuxError.localLaunchFailed("\(error)")
+            }
+            proc.executableURL = URL(fileURLWithPath: transportExecutable)
+            proc.arguments = transportArgv
+        } else if transportProfile.pseudoTerminal == .scriptWrapper {
+            ownedPseudoTerminal = nil
             // Not because the transport is silent on pipes — it is not, measured — but because
             // without usable terminal modes the client cannot go raw and the same stream arrives
             // far larger, padded with full-screen redraws. See requiresPseudoTerminal.
@@ -766,18 +799,32 @@ final class RemoteTmuxControlConnection {
                 executable: transportExecutable, arguments: transportArgv
             )
         } else {
+            ownedPseudoTerminal = nil
             proc.executableURL = URL(fileURLWithPath: transportExecutable)
             proc.arguments = transportArgv
         }
         proc.environment = transportProfile.childProcessEnvironment(
             inheriting: ProcessInfo.processInfo.environment
         )
-        let inPipe = Pipe(), outPipe = Pipe(), errPipe = Pipe()
-        proc.standardInput = inPipe
-        proc.standardOutput = outPipe
+        let errPipe = Pipe()
+        let stdinHandle: FileHandle
+        let reader: FileHandle
+        if let ownedPseudoTerminal {
+            // The slave is the client's terminal; stderr stays a pipe for failure classification.
+            proc.standardInput = ownedPseudoTerminal.slaveHandle
+            proc.standardOutput = ownedPseudoTerminal.slaveHandle
+            stdinHandle = ownedPseudoTerminal.masterWriteHandle
+            reader = ownedPseudoTerminal.masterReadHandle
+        } else {
+            let inPipe = Pipe(), outPipe = Pipe()
+            proc.standardInput = inPipe
+            proc.standardOutput = outPipe
+            stdinHandle = inPipe.fileHandleForWriting
+            reader = outPipe.fileHandleForReading
+        }
         proc.standardError = errPipe
         let stdinWriter = RemoteTmuxControlPipeWriter(
-            handle: inPipe.fileHandleForWriting,
+            handle: stdinHandle,
             label: "com.cmux.remote-tmux.stdin.\(UUID().uuidString)",
             maxPendingBytes: Self.maxPendingStdinBytes,
             onFailure: { [weak self] in
@@ -793,8 +840,7 @@ final class RemoteTmuxControlConnection {
                 self?.handleStdoutBackpressureOverflow()
             }
         )
-        let reader = outPipe.fileHandleForReading
-        stdoutPipeReader.attach(to: reader)
+        stdoutPipeReader.attach(to: reader, closingOnFinish: ownedPseudoTerminal != nil)
         let stderrPipeReader = RemoteTmuxProcessOutputReader(
             label: "com.cmux.remote-tmux.stderr.\(UUID().uuidString)",
             maxPendingChunks: Self.maxPendingStderrChunks,
@@ -803,7 +849,7 @@ final class RemoteTmuxControlConnection {
                 self?.handleStderrBackpressureOverflow()
             }
         )
-        stderrPipeReader.attach(to: errPipe.fileHandleForReading)
+        stderrPipeReader.attach(to: errPipe.fileHandleForReading, closingOnFinish: ownedPseudoTerminal != nil)
         // Process termination and pipe EOF are distinct events. Each reader drains
         // its descriptor before ending the stream so final `%exit` or stderr bytes
         // cannot be discarded by a faster termination callback.
@@ -812,6 +858,9 @@ final class RemoteTmuxControlConnection {
             stderrPipeReader.processDidExit()
         }
 
+        // The child holds its own copy of the slave. The parent's has to go on every path, or
+        // the master never sees end-of-file when the client exits.
+        defer { try? ownedPseudoTerminal?.slaveHandle.close() }
         do {
             try proc.run()
         } catch {
@@ -831,6 +880,7 @@ final class RemoteTmuxControlConnection {
         self.stderrPipeReader = stderrPipeReader
         processGeneration &+= 1
         let generation = processGeneration
+        armControlModeStartDeadline(generation: generation)
         stderrTask = Task { [weak self] in
             for await chunk in stderrPipeReader.stream {
                 if let text = String(data: chunk, encoding: .utf8), !text.isEmpty {
@@ -853,6 +903,36 @@ final class RemoteTmuxControlConnection {
             }
             guard !Task.isCancelled else { return }
             await self?.handleStreamEnd(processGeneration: generation)
+        }
+    }
+
+    /// Starts the transport's time limit on this spawn reaching control mode, if it sets one.
+    ///
+    /// A deadline, not a poll: one sleep per spawn, withdrawn when the attach block arrives or the
+    /// spawn is torn down. It ends the connection only if this same spawn is still waiting for its
+    /// attach block, which is what a tmux client of another release does against a server: it
+    /// starts, prints nothing, and never exits. Without it, the attach waits for the caller's far
+    /// longer deadline and then reports a generic failure.
+    private func armControlModeStartDeadline(generation: UInt64) {
+        controlModeStartDeadlineTask?.cancel()
+        controlModeStartDeadlineTask = nil
+        guard let deadline = transportProfile.controlModeStartDeadline else { return }
+        controlModeStartDeadlineTask = Task { @MainActor [weak self] in
+            do {
+                try await ContinuousClock().sleep(for: deadline)
+            } catch {
+                return
+            }
+            guard let self, self.processGeneration == generation, !self.attachBlockDrained,
+                  self.connectionState != .ended
+            else { return }
+            self.record("control-mode-start-timeout")
+            self.startFailure = self.transportProfile.controlModeStartTimeoutError(host: self.host)
+            self.controlModeStartDeadlineTask = nil
+            self.connectionState = .ended
+            self.cancelScheduledWork()
+            self.teardownProcessHandles()
+            self.observers.notifyExit()
         }
     }
 
@@ -1083,6 +1163,8 @@ final class RemoteTmuxControlConnection {
     /// (reconnect) from a clean slate.
     private func teardownProcessHandles() {
         processGeneration &+= 1
+        controlModeStartDeadlineTask?.cancel()
+        controlModeStartDeadlineTask = nil
         ingestTask?.cancel()
         ingestTask = nil
         stderrTask?.cancel()
@@ -1539,6 +1621,13 @@ final class RemoteTmuxControlConnection {
         record("reconnect-attempt")
         do {
             try spawnProcess(mode: everReachedControlMode ? .attach : attachMode)
+        } catch let error as RemoteTmuxError where error.refusesEveryRetry {
+            // The next attempt would be refused the same way, so retrying would only hide it.
+            record("reconnect-refused")
+            connectionState = .ended
+            cancelScheduledWork()
+            teardownProcessHandles()
+            observers.notifyExit()
         } catch {
             scheduleReconnectAttempt()
         }
@@ -1812,6 +1901,9 @@ final class RemoteTmuxControlConnection {
             // the positional FIFO (see ``attachBlockDrained``).
             if !attachBlockDrained {
                 attachBlockDrained = true
+                // The client answered in control mode, so the start time limit has done its job.
+                controlModeStartDeadlineTask?.cancel()
+                controlModeStartDeadlineTask = nil
                 requestWindowsAndSubscribeAfterAttach()
             } else {
                 handleCommandResult(lines: lines, isError: isError)

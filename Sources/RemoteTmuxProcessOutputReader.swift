@@ -21,6 +21,9 @@ final class RemoteTmuxProcessOutputReader: @unchecked Sendable {
     private var source: DispatchSourceRead?
     private var pendingBytes = 0
     private var closed = false
+    /// Set once a descriptor attached with `closingOnFinish` has been closed.
+    private var descriptorClosed = false
+    private var descriptorCloseWaiters: [CheckedContinuation<Void, Never>] = []
 
     init(
         label: String,
@@ -40,15 +43,35 @@ final class RemoteTmuxProcessOutputReader: @unchecked Sendable {
         self.onOverflow = onOverflow
     }
 
-    func attach(to handle: FileHandle) {
+    /// Starts reading `handle`.
+    ///
+    /// - Parameter closingOnFinish: close the descriptor as soon as the stream finishes, from the
+    ///   read source's cancel handler, instead of whenever the last reference to `handle` goes
+    ///   away. A pty master needs this: until it closes, the descriptor stays open in cmux even
+    ///   though the connection that used it is gone.
+    func attach(to handle: FileHandle, closingOnFinish: Bool = false) {
         let fileDescriptor = handle.fileDescriptor
         queue.async { [weak self] in
-            guard let self, !self.closed, self.source == nil else { return }
+            guard let self, !self.closed, self.source == nil else {
+                if closingOnFinish {
+                    try? handle.close()
+                    self?.noteDescriptorClosed()
+                }
+                return
+            }
             self.handle = handle
             self.makeNonblocking(fileDescriptor)
             let source = DispatchSource.makeReadSource(fileDescriptor: fileDescriptor, queue: self.queue)
             source.setEventHandler { [weak self] in
                 self?.readAvailable(from: fileDescriptor)
+            }
+            if closingOnFinish {
+                // The cancel handler is the one point after which the source no longer uses the
+                // descriptor, so closing here cannot race a read on a reused descriptor number.
+                source.setCancelHandler { [weak self] in
+                    try? handle.close()
+                    self?.noteDescriptorClosed()
+                }
             }
             self.source = source
             source.resume()
@@ -64,6 +87,31 @@ final class RemoteTmuxProcessOutputReader: @unchecked Sendable {
         queue.async { [weak self] in
             self?.drainAfterProcessExit()
         }
+    }
+
+    /// Returns once the descriptor this reader was told to close on finish has been closed.
+    ///
+    /// The close happens on the reader's queue, after the read source is cancelled, so it has no
+    /// other edge a caller could wait on. Only meaningful for a reader attached with
+    /// `closingOnFinish`; for any other reader it never returns.
+    func waitUntilDescriptorClosed() async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            queue.async { [self] in
+                if descriptorClosed {
+                    continuation.resume()
+                } else {
+                    descriptorCloseWaiters.append(continuation)
+                }
+            }
+        }
+    }
+
+    /// Runs on `queue`: the source's cancel handler and `attach` both run there.
+    private func noteDescriptorClosed() {
+        descriptorClosed = true
+        let waiters = descriptorCloseWaiters
+        descriptorCloseWaiters.removeAll()
+        for waiter in waiters { waiter.resume() }
     }
 
     /// Cancels the reader without promising delivery of unread bytes.
