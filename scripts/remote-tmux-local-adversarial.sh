@@ -501,34 +501,129 @@ EOF
   wait_until 10 no_control_clients "$sock"
 
   # Garbage as the tmux the app runs. Since D4a the app runs a running
-  # server's own binary, so the garbage can only be reached two ways (Q-A14):
-  # (a) the server's binary was deleted and the garbage is the app's fallback;
-  # (b) the server's binary path now holds the garbage itself (replaced in
-  # place). Each must be refused, in bounded time, without ssh wording, and
-  # nothing may attach.
-  local gsock garbage_out="" garbage_status=0 how
-  for how in deleted replaced; do
-    gsock="$(copied_server "a3$how" "$REAL_TMUX")" || { fail "garbage ($how): could not start a server from a copy"; continue; }
-    if [ "$how" = deleted ]; then
-      copied_server_delete "a3$how"
-      RELAUNCHED=1
-      relaunch_app "PATH=$garbage:/usr/bin:/bin" || { fail "could not relaunch the app with the garbage tmux first on PATH"; return; }
+  # server's own binary, checking it once with -V (the review's F3), and
+  # otherwise falls back to the resolver's tmux of the same release. The
+  # cases below follow Q-A15, plus two "liar" fakes that print the right
+  # release for -V and then misbehave. Every refusal message must also be
+  # printable: no control characters, no raw undecodable bytes, because the
+  # CLI prints it to the user's terminal.
+  local real_rel; real_rel="$("$REAL_TMUX" -V)"
+  local gsock garbage_out="" garbage_status=0
+
+  # (d) The server's binary was deleted, and the garbage is the app's
+  # fallback: refused, nothing attached.
+  gsock="$(copied_server a3deleted "$REAL_TMUX")" || { fail "garbage (deleted): could not start a server from a copy"; return; }
+  copied_server_delete a3deleted
+  RELAUNCHED=1
+  relaunch_app "PATH=$garbage:/usr/bin:/bin" || { fail "could not relaunch the app with the garbage tmux first on PATH"; return; }
+  run_bounded 40 mirror_rpc "$gsock"
+  garbage_out="$RB_OUT"; garbage_status="$RB_STATUS"
+  printf 'garbage-app-deleted(%s after %ss): %s\n' "$RB_STATUS" "$RB_ELAPSED" "$RB_OUT" >> "$msgs"
+  a3_expect_refusal "garbage, deleted binary" "$gsock"
+  t "$gsock" kill-server 2>/dev/null
+
+  # (r2) The server's binary path holds the garbage, and the garbage is also
+  # first on the app's PATH, so no real tmux is reachable: refused.
+  gsock="$(copied_server a3replaced2 "$REAL_TMUX")" || { fail "garbage (replaced, on PATH): could not start a server from a copy"; return; }
+  copied_server_replace a3replaced2 "$garbage/tmux"
+  run_bounded 40 mirror_rpc "$gsock"
+  printf 'garbage-app-replaced-and-on-path(%s after %ss): %s\n' "$RB_STATUS" "$RB_ELAPSED" "$RB_OUT" >> "$msgs"
+  a3_expect_refusal "garbage at the server's path and first on PATH" "$gsock"
+  t "$gsock" kill-server 2>/dev/null
+  relaunch_app || { fail "could not relaunch the app normally"; return; }
+  RELAUNCHED=""
+
+  # (r1) Only the server's binary path holds the garbage; the app's normal
+  # PATH has the server's own release. A working client exists, so the
+  # mirror must attach (Q-A15). It must attach with the real tmux, and the
+  # garbage may only ever have been asked for -V.
+  make_fake garbagelog <<EOF
+printf '%s\n' "\$*" >> "$FAKES/garbagelog.argv"
+head -c 4096 /dev/urandom
+exit 0
+EOF
+  : > "$FAKES/garbagelog.argv"
+  gsock="$(copied_server a3replaced "$REAL_TMUX")" || { fail "garbage (replaced): could not start a server from a copy"; return; }
+  copied_server_replace a3replaced "$FAKE_DIR/tmux"
+  run_bounded 40 mirror_rpc "$gsock"
+  printf 'garbage-app-replaced(%s after %ss): %s\n' "$RB_STATUS" "$RB_ELAPSED" "$RB_OUT" >> "$msgs"
+  local ids_r1; ids_r1="$(workspace_ids_from "$RB_OUT")"
+  if [ "$RB_STATUS" -eq 0 ] && wait_until 10 has_control_client "$gsock"; then
+    pass "garbage at the server's path only: the app fell back to a real tmux of the same release and mirrored"
+    local cpid exe
+    cpid="$(control_client_pid "$gsock")"
+    exe="$(lsof -a -p "$cpid" -d txt -Fn 2>/dev/null | sed -n 's/^n//p' | head -1)"
+    printf 'r1 control client pid %s exe %s\n' "$cpid" "$exe" >> "$msgs"
+    if [ -n "$exe" ] && [ "$exe" != "$ADV_TMP_ROOT/a3replaced-bin/tmux" ] && [ "$("$exe" -V 2>/dev/null)" = "$real_rel" ]; then
+      pass "the attached control client is the real tmux ($exe, $real_rel)"
     else
-      copied_server_replace "a3$how" "$garbage/tmux"
+      fail "the attached control client is not the real tmux: pid $cpid, executable '$exe'"
     fi
-    run_bounded 40 mirror_rpc "$gsock"
-    printf 'garbage-app-%s(%s after %ss): %s\n' "$how" "$RB_STATUS" "$RB_ELAPSED" "$RB_OUT" >> "$msgs"
-    [ "$how" = deleted ] && { garbage_out="$RB_OUT"; garbage_status="$RB_STATUS"; }
-    [ "$RB_STATUS" -ne 124 ] && rpc_refused && pass "garbage tmux in the app ($how binary): refused after ${RB_ELAPSED}s" \
-      || fail "garbage tmux in the app ($how binary): not refused cleanly (status $RB_STATUS): $RB_OUT"
-    mentions_ssh "$RB_OUT" && fail "garbage tmux message ($how binary) talks about ssh: $RB_OUT" || true
-    no_control_clients "$gsock" && pass "garbage tmux in the app ($how binary): nothing attached" \
-      || fail "garbage tmux in the app ($how binary): a client attached"
+  else
+    fail "garbage at the server's path only: no mirror although a real $real_rel is on the app's PATH (status $RB_STATUS): $RB_OUT"
+  fi
+  if grep -vqxE -- '-V' "$FAKES/garbagelog.argv"; then
+    fail "the garbage was run with more than -V: $(grep -vxE -- '-V' "$FAKES/garbagelog.argv" | tr '\n' ';' | head -c 300)"
+  else
+    pass "the garbage was only ever asked for -V ($(grep -c . < "$FAKES/garbagelog.argv") times)"
+  fi
+  cp "$FAKES/garbagelog.argv" "$ARTIFACTS/A3-garbage-argv.txt" 2>/dev/null
+  local w; for w in $ids_r1; do close_workspace "$w"; done
+  t "$gsock" kill-server 2>/dev/null
+
+  # (L1, L2) Liars at the server's path: each prints the server's exact
+  # release for -V, so the check passes, then misbehaves. L1 prints garbage
+  # for everything else; L2 hangs for everything else. The app must not hang
+  # past its limits, must refuse or fall back without attaching the liar,
+  # and must leave none of the liar's processes running.
+  local liar
+  for liar in garbage hang; do
+    : > "$FAKES/liar$liar.pids"; : > "$FAKES/liar$liar.argv"
+    if [ "$liar" = garbage ]; then
+      make_fake "liar$liar" <<EOF
+case " \$* " in
+  *" -V "*) echo "$real_rel"; exit 0 ;;
+esac
+printf '%s\n' "\$*" >> "$FAKES/liar$liar.argv"
+head -c 4096 /dev/urandom
+exit 0
+EOF
+    else
+      make_fake "liar$liar" <<EOF
+case " \$* " in
+  *" -V "*) echo "$real_rel"; exit 0 ;;
+esac
+printf '%s\n' "\$*" >> "$FAKES/liar$liar.argv"
+echo \$\$ >> "$FAKES/liar$liar.pids"
+exec sleep 1000
+EOF
+    fi
+    gsock="$(copied_server "a3liar$liar" "$REAL_TMUX")" || { fail "liar ($liar): could not start a server from a copy"; continue; }
+    copied_server_replace "a3liar$liar" "$FAKE_DIR/tmux"
+    run_bounded 60 mirror_rpc "$gsock"
+    printf 'liar-%s(%s after %ss): %s\n' "$liar" "$RB_STATUS" "$RB_ELAPSED" "$RB_OUT" >> "$msgs"
+    cp "$FAKES/liar$liar.argv" "$ARTIFACTS/A3-liar-$liar-argv.txt" 2>/dev/null
+    [ "$RB_STATUS" -ne 124 ] && pass "liar that ${liar}s: the attach ended after ${RB_ELAPSED}s" \
+      || fail "liar that ${liar}s: the attach was still waiting after 60 s"
+    if [ "$RB_STATUS" -eq 0 ] && has_control_client "$gsock"; then
+      local lpid lexe
+      lpid="$(control_client_pid "$gsock")"
+      lexe="$(lsof -a -p "$lpid" -d txt -Fn 2>/dev/null | sed -n 's/^n//p' | head -1)"
+      [ "$lexe" != "$ADV_TMP_ROOT/a3liar$liar-bin/tmux" ] && [ "$("$lexe" -V 2>/dev/null)" = "$real_rel" ] \
+        && pass "liar that ${liar}s: the app mirrored, with the real tmux ($lexe)" \
+        || fail "liar that ${liar}s: a client attached, but it is not the real tmux ($lexe)"
+      for w in $(workspace_ids_from "$RB_OUT"); do close_workspace "$w"; done
+    else
+      rpc_refused && pass "liar that ${liar}s: refused, nothing attached" \
+        || fail "liar that ${liar}s: neither mirrored nor refused cleanly (status $RB_STATUS): $RB_OUT"
+      a3_message_printable "liar that ${liar}s"
+    fi
+    local p left=0
+    sleep 5
+    for p in $(cat "$FAKES/liar$liar.pids"); do kill -0 "$p" 2>/dev/null && left=$((left + 1)); kill -KILL "$p" 2>/dev/null; done
+    [ "$left" -eq 0 ] && pass "liar that ${liar}s: none of its processes are left" \
+      || fail "liar that ${liar}s: $left of its processes were still running 5 s after the attach ended"
     t "$gsock" kill-server 2>/dev/null
-    if [ "$how" = deleted ]; then
-      relaunch_app || { fail "could not relaunch the app normally"; return; }
-      RELAUNCHED=""
-    fi
   done
 
   : > "$FAKES/hang.pids"
@@ -585,6 +680,37 @@ copied_server_delete() { rm -f "$ADV_TMP_ROOT/$1-bin/tmux"; }
 # A new file at the same path, as install(1) and `make install` do it. Writing
 # over a running executable in place could get the server killed by macOS.
 copied_server_replace() { rm -f "$ADV_TMP_ROOT/$1-bin/tmux" && cp "$2" "$ADV_TMP_ROOT/$1-bin/tmux"; }
+
+# a3_message_printable <label>: the last reply ($RB_OUT) holds no control
+# characters (other than newline and tab), no DEL, no U+FFFD (the mark left by
+# undecodable bytes) and no JSON-escaped control character. Text that came
+# from an untrusted tmux binary must not reach the user's terminal raw.
+a3_message_printable() {
+  local bad
+  bad="$(printf '%s' "$RB_OUT" | python3 -I -c '
+import re, sys
+data = sys.stdin.buffer.read()
+text = data.decode("utf-8", errors="replace")
+issues = []
+if re.search(r"[\x00-\x08\x0b-\x1f\x7f]", text): issues.append("control characters")
+if "�" in text: issues.append("undecodable bytes")
+if re.search(r"\\u00[01][0-9a-fA-F]|\\u007[fF]", text): issues.append("escaped control characters")
+print(", ".join(issues))
+')"
+  [ -z "$bad" ] && pass "$1: the message is printable text" \
+    || fail "$1: the message carries $bad from the tmux binary's output (see A3-messages.txt)"
+}
+
+# a3_expect_refusal <label> <socket>: the last attach ($RB_*) was refused in
+# bounded time, without ssh wording, with a printable message, and nothing
+# attached to the server.
+a3_expect_refusal() {
+  [ "$RB_STATUS" -ne 124 ] && rpc_refused && pass "$1: refused after ${RB_ELAPSED}s" \
+    || fail "$1: not refused cleanly (status $RB_STATUS): $(printf '%s' "$RB_OUT" | head -c 300)"
+  mentions_ssh "$RB_OUT" && fail "$1: the message talks about ssh" || true
+  rpc_refused && a3_message_printable "$1"
+  no_control_clients "$2" && pass "$1: nothing attached" || fail "$1: a client attached"
+}
 
 # ---- A4: tmux 3.2a (oldest supported) and a fake 3.1 --------------------------
 attack_A4() {

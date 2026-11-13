@@ -198,20 +198,37 @@ app_executable() {
   [ -n "$name" ] && printf '%s\n' "$APP_PATH/Contents/MacOS/$name"
 }
 
+# The tagged app runs as a one-shot launchd job (no keep-alive) under the
+# label check.sh's build-launch and track B's harness use (2011bf5def1). An
+# app started from inside vm-check's GUI tmux runner counts that runner as
+# its responsible process, and quitting or killing such an app took the
+# runner down (Q-A9).
+APP_LAUNCHD_LABEL="local.vmc.app.${TAG_SLUG}"
+APP_LAUNCHD_TARGET="gui/$(id -u)/${APP_LAUNCHD_LABEL}"
+
+# Stops the tagged app: boot the launchd job out first (that also stops the
+# app, and a job that already exited stays loaded until booted out, which
+# blocks the next bootstrap), then signal anything still running from the
+# bundle's process path.
+stop_app() {
+  /bin/launchctl bootout "$APP_LAUNCHD_TARGET" >/dev/null 2>&1
+  local pid
+  for pid in $(pgrep -f "$APP_PROCESS_PATTERN"); do kill -TERM "$pid" 2>/dev/null; done
+  wait_until 15 bash -c "! pgrep -f '$APP_PROCESS_PATTERN' >/dev/null"
+  for pid in $(pgrep -f "$APP_PROCESS_PATTERN"); do kill -KILL "$pid" 2>/dev/null; done
+  wait_until 10 bash -c "! pgrep -f '$APP_PROCESS_PATTERN' >/dev/null"
+}
+
 # Stops the tagged app and starts it again, optionally with extra environment
 # (KEY=VALUE pairs) so a scenario can control what the app inherits.
 #
-# The app is started the way track B's harness and reload.sh start a tagged
-# build: its executable directly, in its own process group, from an `env -i`
-# base that carries the tag's socket settings. `open` would pass none of
-# them, and without CMUX_SOCKET_* the app does not listen on the tagged socket.
+# The environment is what reload.sh gives a tagged build: an `env -i` base
+# that carries the tag's socket settings (without CMUX_SOCKET_* the app does
+# not listen on the tagged socket). `env -i` runs inside the job itself,
+# because a launchd job otherwise inherits the GUI domain's environment.
 relaunch_app() {
-  local pid exe
-  pid="$(app_pid)"
-  if [ -n "$pid" ]; then
-    kill -TERM "$pid" 2>/dev/null
-    wait_until 15 bash -c "! kill -0 $pid 2>/dev/null" || kill -KILL "$pid" 2>/dev/null
-  fi
+  local exe
+  stop_app
   exe="$(app_executable)"
   [ -n "$exe" ] && [ -x "$exe" ] || { echo "relaunch_app: no executable under $APP_PATH" >&2; return 1; }
   local env_args=(
@@ -227,12 +244,22 @@ relaunch_app() {
     "CMUX_REMOTE_DAEMON_ALLOW_LOCAL_BUILD=1"
     "CMUX_DEV_BACKEND_MODE=${CMUX_DEV_BACKEND_MODE:-local}"
   )
-  # Scenario overrides come last, so they win.
+  # Scenario overrides come last, so they win (env applies them in order).
   local kv; for kv in "$@"; do env_args+=("$kv"); done
-  set -m
-  ( exec env -i "${env_args[@]}" "$exe" < /dev/null >> "$ADV_TMP_ROOT/app-launch.log" 2>&1 ) &
-  set +m
-  disown 2>/dev/null
+  RELAUNCH_COUNT=$(( ${RELAUNCH_COUNT:-0} + 1 ))
+  local plist="$ADV_TMP_ROOT/${APP_LAUNCHD_LABEL}-${RELAUNCH_COUNT}.plist"
+  local log="$ADV_TMP_ROOT/app-launch.log"
+  python3 -I -c '
+import plistlib, sys
+label, log, plist = sys.argv[1], sys.argv[2], sys.argv[3]
+argv = ["/usr/bin/env", "-i"] + sys.argv[4:]
+with open(plist, "wb") as handle:
+    plistlib.dump({"Label": label, "ProgramArguments": argv, "RunAtLoad": True,
+                   "KeepAlive": False, "ProcessType": "Interactive",
+                   "StandardOutPath": log, "StandardErrorPath": log}, handle)
+' "$APP_LAUNCHD_LABEL" "$log" "$plist" "${env_args[@]}" "$exe" || { echo "relaunch_app: could not write $plist" >&2; return 1; }
+  /bin/launchctl bootstrap "gui/$(id -u)" "$plist" >> "$log" 2>&1 \
+    || { echo "relaunch_app: launchctl bootstrap failed for $plist" >&2; return 1; }
   wait_until 90 app_responds
 }
 
