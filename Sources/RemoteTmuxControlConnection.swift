@@ -321,6 +321,12 @@ final class RemoteTmuxControlConnection {
     private(set) var startFailure: RemoteTmuxError?
     /// The pending time limit on the current spawn's control-mode start, if the transport sets one.
     var controlModeStartDeadlineTask: Task<Void, Never>?
+    /// Reconnect attempts in a row whose client missed the start time limit. Reset when a client
+    /// answers its attach.
+    private var reconnectStartTimeouts = 0
+    /// After this many such attempts in a row the connection ends with
+    /// ``RemoteTmuxTransportProfile/reconnectGaveUpError(host:)``. Its message names the number.
+    static let maxReconnectStartTimeouts = 3
     /// How the initial attach opens the session. Reconnects always use `.attach`; see
     /// ``spawnProcess(mode:)``.
     let attachMode: RemoteTmuxControlAttachMode
@@ -933,7 +939,16 @@ final class RemoteTmuxControlConnection {
             else { return }
             self.controlModeStartDeadlineTask = nil
             if isReconnect {
-                self.record("control-mode-start-timeout-reconnect")
+                self.reconnectStartTimeouts += 1
+                // Nothing a later attempt does differently can be counted on, so a run of them ends
+                // the connection with a reason instead of retrying without end.
+                if self.reconnectStartTimeouts >= Self.maxReconnectStartTimeouts {
+                    self.endReconnecting(
+                        with: self.transportProfile.reconnectGaveUpError(host: self.host),
+                        event: "control-mode-start-timeout-reconnect-gave-up")
+                    return
+                }
+                self.record("control-mode-start-timeout-reconnect count=\(self.reconnectStartTimeouts)")
                 if self.connectionState == .connected {
                     self.beginReconnecting(preservingBackoff: true)
                 } else {
@@ -1619,8 +1634,46 @@ final class RemoteTmuxControlConnection {
                 return
             }
             guard let self, self.connectionState == .reconnecting else { return }
+            // A transport that compares releases checks the client it is about to start, as
+            // attach does. After `brew upgrade` deleted the server's binary, the fallback can be a
+            // release that never answers in control mode, and the reconnect would otherwise retry
+            // it forever with nothing on screen.
+            if self.transportProfile.comparesClientRelease {
+                if let refusal = await self.releaseRefusalBeforeReconnect() {
+                    guard self.connectionState == .reconnecting else { return }
+                    self.endReconnecting(with: refusal, event: "reconnect-release-refused")
+                    return
+                }
+                guard self.connectionState == .reconnecting, !Task.isCancelled else { return }
+            }
             self.attemptReconnectSpawn()
         }
+    }
+
+    /// The release refusal for the client a reconnect would start, or nil when it may go ahead.
+    ///
+    /// Only that refusal stops the reconnect. Any other failure of the check (the server just went
+    /// away, say) is left to the spawn, whose outcome the reconnect already classifies.
+    private func releaseRefusalBeforeReconnect() async -> RemoteTmuxError? {
+        let transport = RemoteTmuxSSHTransport(host: host, transportProfile: transportProfile)
+        do {
+            try await transport.assertClientMatchesServer()
+            return nil
+        } catch let error as RemoteTmuxError where error.isClientReleaseRefusal {
+            return error
+        } catch {
+            return nil
+        }
+    }
+
+    /// Ends a reconnecting connection for good, keeping `error` as the reason the owner reports.
+    private func endReconnecting(with error: RemoteTmuxError, event: String) {
+        record(event)
+        startFailure = error
+        connectionState = .ended
+        cancelScheduledWork()
+        teardownProcessHandles()
+        observers.notifyExit()
     }
 
     /// Re-spawns the ssh control client for a reconnect attempt. `.attach` once this
@@ -1917,6 +1970,7 @@ final class RemoteTmuxControlConnection {
             if !attachBlockDrained {
                 attachBlockDrained = true
                 // The client answered in control mode, so the start time limit has done its job.
+                reconnectStartTimeouts = 0
                 controlModeStartDeadlineTask?.cancel()
                 controlModeStartDeadlineTask = nil
                 requestWindowsAndSubscribeAfterAttach()

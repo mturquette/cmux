@@ -6,12 +6,41 @@ import os
 /// checked that it really is that server's tmux.
 ///
 /// The process is named by its pid and its start time together, so a later process that reuses the
-/// pid is a different candidate.
+/// pid is a different candidate. The file is named by its device, inode and modification time, so
+/// a binary rebuilt in place at the same path is a different candidate too, and is checked again.
 struct RemoteTmuxServerBinaryCandidate: Sendable, Hashable {
     let path: String
     let processID: pid_t
     /// Microseconds since the epoch at which the process started.
     let startTime: Int64
+    let file: FileIdentity
+
+    init(path: String, processID: pid_t, startTime: Int64, file: FileIdentity = FileIdentity()) {
+        self.path = path
+        self.processID = processID
+        self.startTime = startTime
+        self.file = file
+    }
+
+    /// What `stat` says about the file at ``path``: which file it is, and when it last changed.
+    struct FileIdentity: Sendable, Hashable {
+        var device: Int64 = 0
+        var inode: UInt64 = 0
+        var modifiedSeconds: Int64 = 0
+        var modifiedNanoseconds: Int64 = 0
+
+        /// The identity of the file at `path`, or nil when it cannot be read.
+        static func of(path: String) -> FileIdentity? {
+            var status = stat()
+            guard stat(path, &status) == 0 else { return nil }
+            return FileIdentity(
+                device: Int64(status.st_dev),
+                inode: UInt64(status.st_ino),
+                modifiedSeconds: Int64(status.st_mtimespec.tv_sec),
+                modifiedNanoseconds: Int64(status.st_mtimespec.tv_nsec)
+            )
+        }
+    }
 }
 
 /// Finds the tmux binary a running local server was started from, so cmux's client is always the
@@ -52,10 +81,11 @@ struct RemoteTmuxLocalServerBinary: Sendable {
               let process = Self.processInfo(pid), process.pbi_uid == userID,
               let path = Self.executablePath(ofProcess: pid),
               path.hasPrefix("/"),
-              isExecutable(path)
+              isExecutable(path),
+              let file = RemoteTmuxServerBinaryCandidate.FileIdentity.of(path: path)
         else { return nil }
         let startTime = Int64(process.pbi_start_tvsec) * 1_000_000 + Int64(process.pbi_start_tvusec)
-        return RemoteTmuxServerBinaryCandidate(path: path, processID: pid, startTime: startTime)
+        return RemoteTmuxServerBinaryCandidate(path: path, processID: pid, startTime: startTime, file: file)
     }
 
     /// The pid of the process listening on `socketPath`, when it runs as ``userID``.
@@ -108,34 +138,81 @@ struct RemoteTmuxLocalServerBinary: Sendable {
     static func release(fromClientVersionOutput output: String) -> String? {
         let words = output.split(whereSeparator: \.isWhitespace)
         guard words.count == 2, words[0] == "tmux" else { return nil }
-        return String(words[1])
+        return releaseShaped(String(words[1]))
     }
 
     /// The release in the server's `#{version}` answer: `3.2a\n` gives `3.2a`.
     static func release(fromServerVersionOutput output: String) -> String? {
-        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
+        releaseShaped(output.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    /// `text` when it has the shape of a tmux release, otherwise nil.
+    ///
+    /// The text comes from a binary cmux does not trust, and the release ends up in a message the
+    /// CLI prints to the user's terminal, so only a strict shape is let through: up to four digits,
+    /// a dot, up to four digits and an optional letter (`3.2a`), with an optional `-rc` suffix or
+    /// `next-` prefix, or `master`. Anything else is shown as unknown.
+    static func releaseShaped(_ text: String) -> String? {
+        let release = /(?:next-)?[0-9]{1,4}\.[0-9]{1,4}[a-z]?(?:-rc[0-9]{0,2})?|master/
+        return text.wholeMatch(of: release) != nil ? text : nil
+    }
+
+    /// The path a resolver printed, when it is one absolute line with nothing hidden in it, so it
+    /// can be quoted in a message. Otherwise nil.
+    static func displayablePath(_ output: String) -> String? {
+        let path = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard path.hasPrefix("/"), path.utf8.count <= 1024,
+              !RemoteTmuxLocalServerSocket.hasHiddenCharacter(path)
+        else { return nil }
+        return path
     }
 }
 
 /// What cmux learned when it ran a server's candidate binary with `-V`, kept per server process so
 /// each server costs one extra process however many commands cmux sends it.
+///
+/// One table for the app, because the answer belongs to the server process and its file, not to
+/// any one mirror: every profile value for the same socket (they are rebuilt for each command) must
+/// see the check another one made. A profile is built from a host with no route to the controller,
+/// so the table cannot be passed down without threading it through every host, and tests inject
+/// their own instead. The lock guards a small dictionary that is read and written from the
+/// transport actors and the main actor; each access is one lookup or one insert, never held across
+/// a suspension point.
 final class RemoteTmuxServerBinaryVerifications: Sendable {
     /// The app's one table. Tests make their own.
     static let shared = RemoteTmuxServerBinaryVerifications()
 
-    private let results = OSAllocatedUnfairLock(initialState: [RemoteTmuxServerBinaryCandidate: Bool]())
+    /// The most entries kept. A server that exited leaves its entry behind, so the oldest go first.
+    let capacity: Int
+
+    private struct Table {
+        var results: [RemoteTmuxServerBinaryCandidate: Bool] = [:]
+        /// Insertion order, oldest first, for eviction.
+        var order: [RemoteTmuxServerBinaryCandidate] = []
+    }
+
+    private let table = OSAllocatedUnfairLock(initialState: Table())
+
+    init(capacity: Int = 64) {
+        self.capacity = max(1, capacity)
+    }
 
     /// Whether `candidate` printed its server's release, or nil when it has not been run yet.
     func result(for candidate: RemoteTmuxServerBinaryCandidate) -> Bool? {
-        results.withLock { $0[candidate] }
+        table.withLock { $0.results[candidate] }
     }
 
     func record(_ candidate: RemoteTmuxServerBinaryCandidate, matchesServer: Bool) {
-        results.withLock { table in
-            // A server that exited leaves its entry behind; a bound keeps the table small.
-            if table.count >= 64 { table.removeAll() }
-            table[candidate] = matchesServer
+        let capacity = capacity
+        table.withLock { table in
+            if table.results.updateValue(matchesServer, forKey: candidate) == nil {
+                table.order.append(candidate)
+            }
+            // Only the oldest entries go. A mirror whose entry went anyway is checked again before
+            // its next reconnect, which is the only time it starts a new client.
+            while table.order.count > capacity {
+                table.results.removeValue(forKey: table.order.removeFirst())
+            }
         }
     }
 }

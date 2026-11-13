@@ -645387,29 +645387,57 @@
     "remoteTmux.error.localVersionsDiffer": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "the tmux server at %1$@ runs tmux %2$@, but its own tmux binary is gone, and the tmux cmux found, %3$@, is tmux %4$@. tmux cannot mirror across versions. To mirror this server, install tmux %2$@ in place of %3$@, or end the server with tmux -S %1$@ kill-server (this closes every session on it, with every program running in them) and start it again." } },
-        "ar": { "stringUnit": { "state": "translated", "value": "خادم tmux عند %1$@ يشغّل tmux %2$@، لكن ملفه التنفيذي لم يعد موجودًا، وtmux الذي وجده cmux، أي %3$@، هو tmux %4$@. لا يستطيع tmux النسخ المتطابق بين إصدارين مختلفين. لنسخ هذا الخادم، ثبّت tmux %2$@ مكان %3$@، أو أنهِ الخادم باستخدام tmux -S %1$@ kill-server (يغلق هذا كل جلسة عليه مع كل برنامج يعمل فيها) ثم شغّله من جديد." } },
-        "de": { "stringUnit": { "state": "translated", "value": "Der tmux-Server unter %1$@ läuft mit tmux %2$@, aber seine eigene tmux-Datei ist nicht mehr vorhanden, und das von cmux gefundene tmux, %3$@, ist tmux %4$@. tmux kann nicht über Versionen hinweg spiegeln. Um diesen Server zu spiegeln, installiere tmux %2$@ anstelle von %3$@, oder beende den Server mit tmux -S %1$@ kill-server (das schließt jede Sitzung darauf mit allen Programmen, die darin laufen) und starte ihn neu." } },
-        "es": { "stringUnit": { "state": "translated", "value": "el servidor tmux de %1$@ ejecuta tmux %2$@, pero su propio binario de tmux ya no existe, y el tmux que encontró cmux, %3$@, es tmux %4$@. tmux no puede reflejar entre versiones distintas. Para reflejar este servidor, instala tmux %2$@ en lugar de %3$@, o termina el servidor con tmux -S %1$@ kill-server (esto cierra todas sus sesiones, con todos los programas que se ejecutan en ellas) y vuelve a iniciarlo." } },
-        "fr": { "stringUnit": { "state": "translated", "value": "le serveur tmux à %1$@ exécute tmux %2$@, mais son propre binaire tmux n’existe plus, et le tmux trouvé par cmux, %3$@, est tmux %4$@. tmux ne peut pas faire de miroir entre versions. Pour refléter ce serveur, installez tmux %2$@ à la place de %3$@, ou arrêtez le serveur avec tmux -S %1$@ kill-server (cela ferme toutes ses sessions, avec tous les programmes qui y tournent) puis relancez-le." } },
-        "ja": { "stringUnit": { "state": "translated", "value": "%1$@ の tmux サーバーは tmux %2$@ で動いていますが、そのサーバー自身の tmux バイナリがなくなっており、cmux が見つけた tmux（%3$@）は tmux %4$@ です。tmux はバージョンをまたいでミラーできません。このサーバーをミラーするには、%3$@ の代わりに tmux %2$@ をインストールするか、tmux -S %1$@ kill-server でサーバーを終了して（そのサーバー上のすべてのセッションと、その中で動いているすべてのプログラムが閉じます）起動し直してください。" } },
-        "ko": { "stringUnit": { "state": "translated", "value": "%1$@의 tmux 서버는 tmux %2$@로 실행 중이지만 서버 자체의 tmux 바이너리가 없어졌고, cmux가 찾은 tmux(%3$@)는 tmux %4$@입니다. tmux는 서로 다른 버전 사이에서 미러링할 수 없습니다. 이 서버를 미러링하려면 %3$@ 대신 tmux %2$@을 설치하거나, tmux -S %1$@ kill-server로 서버를 종료한 뒤(서버의 모든 세션과 그 안에서 실행 중인 모든 프로그램이 닫힙니다) 다시 시작하세요." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "%1$@ 处的 tmux 服务器运行的是 tmux %2$@，但它自己的 tmux 可执行文件已不存在，而 cmux 找到的 tmux（%3$@）是 tmux %4$@。tmux 无法跨版本镜像。要镜像此服务器，请用 tmux %2$@ 替换 %3$@，或使用 tmux -S %1$@ kill-server 结束该服务器（这会关闭其上的所有会话以及其中运行的所有程序）后重新启动。" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "%1$@ 的 tmux 伺服器執行的是 tmux %2$@，但它自己的 tmux 執行檔已不存在，而 cmux 找到的 tmux（%3$@）是 tmux %4$@。tmux 無法跨版本鏡像。要鏡像此伺服器，請用 tmux %2$@ 取代 %3$@，或使用 tmux -S %1$@ kill-server 結束該伺服器（這會關閉其上的所有工作階段以及其中執行的所有程式）後重新啟動。" } }
+        "en": { "stringUnit": { "state": "translated", "value": "the tmux server at %1$@ runs tmux %2$@, but its own tmux binary is gone, and the tmux cmux found, %3$@, is tmux %4$@. tmux cannot mirror across versions. To mirror this server, install tmux %2$@ in place of %3$@, or end the server with tmux -S %5$@ kill-server (this closes every session on it, with every program running in them) and start it again." } },
+        "ar": { "stringUnit": { "state": "translated", "value": "خادم tmux عند %1$@ يشغّل tmux %2$@، لكن ملفه التنفيذي لم يعد موجودًا، وtmux الذي وجده cmux، أي %3$@، هو tmux %4$@. لا يستطيع tmux النسخ المتطابق بين إصدارين مختلفين. لنسخ هذا الخادم، ثبّت tmux %2$@ مكان %3$@، أو أنهِ الخادم باستخدام tmux -S %5$@ kill-server (يغلق هذا كل جلسة عليه مع كل برنامج يعمل فيها) ثم شغّله من جديد." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Der tmux-Server unter %1$@ läuft mit tmux %2$@, aber seine eigene tmux-Datei ist nicht mehr vorhanden, und das von cmux gefundene tmux, %3$@, ist tmux %4$@. tmux kann nicht über Versionen hinweg spiegeln. Um diesen Server zu spiegeln, installiere tmux %2$@ anstelle von %3$@, oder beende den Server mit tmux -S %5$@ kill-server (das schließt jede Sitzung darauf mit allen Programmen, die darin laufen) und starte ihn neu." } },
+        "es": { "stringUnit": { "state": "translated", "value": "el servidor tmux de %1$@ ejecuta tmux %2$@, pero su propio binario de tmux ya no existe, y el tmux que encontró cmux, %3$@, es tmux %4$@. tmux no puede reflejar entre versiones distintas. Para reflejar este servidor, instala tmux %2$@ en lugar de %3$@, o termina el servidor con tmux -S %5$@ kill-server (esto cierra todas sus sesiones, con todos los programas que se ejecutan en ellas) y vuelve a iniciarlo." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "le serveur tmux à %1$@ exécute tmux %2$@, mais son propre binaire tmux n’existe plus, et le tmux trouvé par cmux, %3$@, est tmux %4$@. tmux ne peut pas faire de miroir entre versions. Pour refléter ce serveur, installez tmux %2$@ à la place de %3$@, ou arrêtez le serveur avec tmux -S %5$@ kill-server (cela ferme toutes ses sessions, avec tous les programmes qui y tournent) puis relancez-le." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%1$@ の tmux サーバーは tmux %2$@ で動いていますが、そのサーバー自身の tmux バイナリがなくなっており、cmux が見つけた tmux（%3$@）は tmux %4$@ です。tmux はバージョンをまたいでミラーできません。このサーバーをミラーするには、%3$@ の代わりに tmux %2$@ をインストールするか、tmux -S %5$@ kill-server でサーバーを終了して（そのサーバー上のすべてのセッションと、その中で動いているすべてのプログラムが閉じます）起動し直してください。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "%1$@의 tmux 서버는 tmux %2$@로 실행 중이지만 서버 자체의 tmux 바이너리가 없어졌고, cmux가 찾은 tmux(%3$@)는 tmux %4$@입니다. tmux는 서로 다른 버전 사이에서 미러링할 수 없습니다. 이 서버를 미러링하려면 %3$@ 대신 tmux %2$@을 설치하거나, tmux -S %5$@ kill-server로 서버를 종료한 뒤(서버의 모든 세션과 그 안에서 실행 중인 모든 프로그램이 닫힙니다) 다시 시작하세요." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "%1$@ 处的 tmux 服务器运行的是 tmux %2$@，但它自己的 tmux 可执行文件已不存在，而 cmux 找到的 tmux（%3$@）是 tmux %4$@。tmux 无法跨版本镜像。要镜像此服务器，请用 tmux %2$@ 替换 %3$@，或使用 tmux -S %5$@ kill-server 结束该服务器（这会关闭其上的所有会话以及其中运行的所有程序）后重新启动。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "%1$@ 的 tmux 伺服器執行的是 tmux %2$@，但它自己的 tmux 執行檔已不存在，而 cmux 找到的 tmux（%3$@）是 tmux %4$@。tmux 無法跨版本鏡像。要鏡像此伺服器，請用 tmux %2$@ 取代 %3$@，或使用 tmux -S %5$@ kill-server 結束該伺服器（這會關閉其上的所有工作階段以及其中執行的所有程式）後重新啟動。" } }
+      }
+    },
+    "remoteTmux.error.localReconnectGaveUp": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "the mirror lost its connection to tmux on this Mac and stopped after 3 reconnect attempts that got no answer. The session is still running; mirror it again to retry." } },
+        "ar": { "stringUnit": { "state": "translated", "value": "فقدت المرآة اتصالها بـ tmux على جهاز Mac هذا وتوقفت بعد 3 محاولات إعادة اتصال لم تتلقَّ أي رد. الجلسة ما زالت تعمل؛ اعكسها مرة أخرى لإعادة المحاولة." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Die Spiegelung hat ihre Verbindung zu tmux auf diesem Mac verloren und nach 3 unbeantworteten Verbindungsversuchen aufgehört. Die Sitzung läuft weiter; spiegele sie erneut, um es noch einmal zu versuchen." } },
+        "es": { "stringUnit": { "state": "translated", "value": "el reflejo perdió su conexión con tmux en este Mac y se detuvo tras 3 intentos de reconexión sin respuesta. La sesión sigue en ejecución; vuelve a reflejarla para intentarlo de nuevo." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "le miroir a perdu sa connexion à tmux sur ce Mac et s’est arrêté après 3 tentatives de reconnexion restées sans réponse. La session tourne toujours ; refaites le miroir pour réessayer." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ミラーはこの Mac の tmux との接続を失い、応答のない再接続を 3 回試みた後に停止しました。セッションは動き続けています。もう一度ミラーして再試行してください。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "미러가 이 Mac의 tmux와의 연결을 잃었고, 응답 없는 재연결 시도를 3번 한 뒤 중지되었습니다. 세션은 계속 실행 중입니다. 다시 미러링해 재시도하세요." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "镜像与此 Mac 上的 tmux 失去连接，在 3 次没有响应的重连尝试后停止。会话仍在运行；请重新镜像以重试。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "鏡像與此 Mac 上的 tmux 失去連線，在 3 次沒有回應的重新連線嘗試後停止。工作階段仍在執行；請重新鏡像以再試一次。" } }
+      }
+    },
+    "remoteTmux.mirrorEnded.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "tmux mirror ended" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "انتهت مرآة tmux" } },
+        "de": { "stringUnit": { "state": "translated", "value": "tmux-Spiegelung beendet" } },
+        "es": { "stringUnit": { "state": "translated", "value": "El reflejo de tmux terminó" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Miroir tmux terminé" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "tmux のミラーが終了しました" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "tmux 미러가 종료됨" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "tmux 镜像已结束" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "tmux 鏡像已結束" } }
       }
     },
     "remoteTmux.error.localControlModeTimedOut": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "tmux on this Mac did not answer within %@ seconds, so cmux stopped its client. The session is still running; try again." } },
-        "ar": { "stringUnit": { "state": "translated", "value": "لم يستجب tmux على جهاز Mac هذا خلال %@ ثوانٍ، فأوقف cmux عميله. الجلسة ما زالت تعمل؛ حاول مرة أخرى." } },
-        "de": { "stringUnit": { "state": "translated", "value": "tmux auf diesem Mac hat nicht innerhalb von %@ Sekunden geantwortet, daher hat cmux seinen Client beendet. Die Sitzung läuft weiter; versuche es erneut." } },
-        "es": { "stringUnit": { "state": "translated", "value": "tmux en este Mac no respondió en %@ segundos, así que cmux detuvo su cliente. La sesión sigue en ejecución; vuelve a intentarlo." } },
-        "fr": { "stringUnit": { "state": "translated", "value": "tmux sur ce Mac n’a pas répondu dans les %@ secondes, donc cmux a arrêté son client. La session tourne toujours ; réessayez." } },
-        "ja": { "stringUnit": { "state": "translated", "value": "この Mac の tmux が %@ 秒以内に応答しなかったため、cmux がクライアントを停止しました。セッションは動き続けています。もう一度お試しください。" } },
-        "ko": { "stringUnit": { "state": "translated", "value": "이 Mac의 tmux가 %@초 안에 응답하지 않아 cmux가 클라이언트를 중지했습니다. 세션은 계속 실행 중입니다. 다시 시도하세요." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "此 Mac 上的 tmux 在 %@ 秒内没有响应，因此 cmux 停止了它的客户端。会话仍在运行；请重试。" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "此 Mac 上的 tmux 在 %@ 秒內沒有回應，因此 cmux 停止了它的用戶端。工作階段仍在執行；請再試一次。" } }
+        "en": { "stringUnit": { "state": "translated", "value": "tmux on this Mac did not answer within 5 seconds, so cmux stopped its client. The session is still running; try again." } },
+        "ar": { "stringUnit": { "state": "translated", "value": "لم يستجب tmux على جهاز Mac هذا خلال 5 ثوانٍ، فأوقف cmux عميله. الجلسة ما زالت تعمل؛ حاول مرة أخرى." } },
+        "de": { "stringUnit": { "state": "translated", "value": "tmux auf diesem Mac hat nicht innerhalb von 5 Sekunden geantwortet, daher hat cmux seinen Client beendet. Die Sitzung läuft weiter; versuche es erneut." } },
+        "es": { "stringUnit": { "state": "translated", "value": "tmux en este Mac no respondió en 5 segundos, así que cmux detuvo su cliente. La sesión sigue en ejecución; vuelve a intentarlo." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "tmux sur ce Mac n’a pas répondu dans les 5 secondes, donc cmux a arrêté son client. La session tourne toujours ; réessayez." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "この Mac の tmux が 5 秒以内に応答しなかったため、cmux がクライアントを停止しました。セッションは動き続けています。もう一度お試しください。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "이 Mac의 tmux가 5초 안에 응답하지 않아 cmux가 클라이언트를 중지했습니다. 세션은 계속 실행 중입니다. 다시 시도하세요." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "此 Mac 上的 tmux 在 5 秒内没有响应，因此 cmux 停止了它的客户端。会话仍在运行；请重试。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "此 Mac 上的 tmux 在 5 秒內沒有回應，因此 cmux 停止了它的用戶端。工作階段仍在執行；請再試一次。" } }
       }
     },
     "remoteTmux.error.localTmuxTimedOut": {

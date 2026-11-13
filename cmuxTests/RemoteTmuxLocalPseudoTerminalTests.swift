@@ -218,7 +218,7 @@ import Testing
 
         #expect(connected == false)
         #expect(ContinuousClock().now - start < .seconds(5))
-        #expect(connection.startFailure == .localControlModeTimedOut(seconds: 0))
+        #expect(connection.startFailure == .localControlModeTimedOut)
         #expect(connection.connectionState == .ended)
     }
 
@@ -302,6 +302,51 @@ import Testing
         #expect(Self.storedCount(spawns) == 3)
     }
 
+    /// A reconnect whose client never answers must not retry forever with nothing on screen. After
+    /// three such attempts in a row the connection ends with its own reason.
+    @MainActor
+    @Test func aReconnectThatNeverAnswersEndsWithAReasonAfterThreeAttempts() async throws {
+        let directory = NSTemporaryDirectory() + "remote-tmux-reconnect-cap-\(UUID().uuidString)"
+        try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: directory) }
+        let spawns = directory + "/spawns"
+        // The first client answers and exits; every later one never answers.
+        let client = try Self.writeScript(at: directory + "/client", body: """
+        n=$(( $(cat '\(spawns)' 2>/dev/null || echo 0) + 1 ))
+        echo "$n" > '\(spawns)'
+        case "$n" in
+          1) printf '\\033P1000p%%begin 1 1 0\\n%%end 1 1 0\\n'; exec sleep 0.3 ;;
+          *) exec sleep 30 ;;
+        esac
+        """)
+        let connection = RemoteTmuxControlConnection(
+            host: RemoteTmuxHost.local(serverSocketPath: directory + "/no-server"),
+            sessionName: "s",
+            transportProfile: OwnedPtyProfile(executable: client, controlModeStartDeadline: .milliseconds(300))
+        )
+        let outcome = ReconnectOutcome()
+        let ended = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+            outcome.continuation = continuation
+            connection.addObserver(onExit: { outcome.finish(true) }, onConnectionStateChanged: { _ in })
+            do {
+                try connection.start()
+            } catch {
+                outcome.finish(false)
+                return
+            }
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(40))
+                outcome.finish(false)
+            }
+        }
+        defer { connection.stop() }
+
+        #expect(ended, "the connection kept retrying a reconnect that never answers (\(Self.storedCount(spawns)) spawns)")
+        #expect(connection.startFailure == .localReconnectGaveUp)
+        #expect(Self.storedCount(spawns) == 4, "one first attach and three reconnect attempts")
+        #expect(!RemoteTmuxError.localReconnectGaveUp.message.lowercased().contains("ssh"))
+    }
+
     /// A reconnect re-checks the socket. When the path has been replaced by something that is not
     /// the user's socket, the connection ends without spawning the client again.
     @MainActor
@@ -376,7 +421,8 @@ import Testing
         var controlModeStartDeadline: Duration?
 
         func executablePath() -> String { executable }
-        func controlModeStartTimeoutError(host: RemoteTmuxHost) -> RemoteTmuxError { .localControlModeTimedOut(seconds: 0) }
+        func controlModeStartTimeoutError(host: RemoteTmuxHost) -> RemoteTmuxError { .localControlModeTimedOut }
+        func reconnectGaveUpError(host: RemoteTmuxHost) -> RemoteTmuxError { .localReconnectGaveUp }
         func controlStreamArgv(
             host: RemoteTmuxHost, sessionName: String, mode: RemoteTmuxControlAttachMode
         ) -> [String] { [] }

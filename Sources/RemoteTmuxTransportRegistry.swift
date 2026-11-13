@@ -286,6 +286,10 @@ protocol RemoteTmuxTransportProfile: Sendable {
     /// rule out entirely.
     var controlModeStartDeadline: Duration? { get }
 
+    /// The error a reconnect ends with after its clients missed ``controlModeStartDeadline`` the
+    /// most times in a row a connection allows.
+    func reconnectGaveUpError(host: RemoteTmuxHost) -> RemoteTmuxError
+
     /// The error a control client that missed ``controlModeStartDeadline`` ends with.
     func controlModeStartTimeoutError(host: RemoteTmuxHost) -> RemoteTmuxError
 
@@ -436,6 +440,10 @@ extension RemoteTmuxTransportProfile {
     }
 
     var controlModeStartDeadline: Duration? { nil }
+
+    func reconnectGaveUpError(host: RemoteTmuxHost) -> RemoteTmuxError {
+        .unreachable(host.destination)
+    }
 
     func controlModeStartTimeoutError(host: RemoteTmuxHost) -> RemoteTmuxError {
         .unreachable(host.destination)
