@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from harness import (  # noqa: E402
     REGISTRY, Catalog, CheckFailed, Harness, Mirror, NotImplementedYet, Skipped, Tmux, clean_environment,
-    error_message, gui_install_tmux, bind_stale_socket, local_host, test, wait_until,
+    error_message, error_text, gui_install_tmux, bind_stale_socket, local_host, test, tmux_version, wait_until,
 )
 
 UID = os.getuid()
@@ -1094,6 +1094,191 @@ def t20_start_directory(ctx):
     run_case(6, "a newline in the path", newline, expect_home=True)
 
     run_case(7, "a server is already running", normal, preexisting=True)
+
+
+class TerminalClient:
+    """A normal (non-control) tmux client on its own pseudo-terminal of a fixed size.
+
+    Bytes written with `type()` reach tmux as key presses, exactly as a person typing in a
+    terminal window, so tmux updates the client's activity time and makes it the latest client.
+    The client's output is drained on a thread so tmux never blocks writing to it.
+    """
+
+    def __init__(self, server, session, columns, rows, control_flags=None):
+        import fcntl
+        import pty
+        import struct
+        import termios
+        import threading
+        self.pid, self.fd = pty.fork()
+        if self.pid == 0:
+            try:
+                fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack("HHHH", rows, columns, 0, 0))
+                env = server.env()
+                env["TERM"] = "xterm-256color"
+                if control_flags is None:
+                    argv = server.argv("attach-session", "-t", f"={session}")
+                else:
+                    # A bare control-mode client standing in for a second mirror.
+                    argv = server.argv("-C", "attach-session", "-f", control_flags, "-t", f"={session}")
+                os.execve(argv[0], argv, env)
+            finally:
+                os._exit(127)
+        fcntl.ioctl(self.fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, columns, 0, 0))
+        self.columns, self.rows = columns, rows
+        self._open = True
+        threading.Thread(target=self._drain, daemon=True).start()
+
+    def _drain(self):
+        while self._open:
+            try:
+                if not os.read(self.fd, 65536):
+                    return
+            except OSError:
+                return
+
+    def type(self, text):
+        os.write(self.fd, text.encode())
+
+    def close(self):
+        self._open = False
+        try:
+            os.kill(self.pid, signal.SIGKILL)
+            os.waitpid(self.pid, 0)
+        except OSError:
+            pass
+        try:
+            os.close(self.fd)
+        except OSError:
+            pass
+
+
+def window_columns(server, session):
+    return int(server.fmt(f"={session}:", "#{window_width}"))
+
+
+def settled_columns(server, session, quiet=1.5, timeout=20.0):
+    """The window's width once it has stopped changing for `quiet` seconds."""
+    deadline = time.monotonic() + timeout
+    last, since = None, time.monotonic()
+    while time.monotonic() < deadline:
+        now = window_columns(server, session)
+        if now != last:
+            last, since = now, time.monotonic()
+        elif time.monotonic() - since >= quiet:
+            return now
+        time.sleep(0.1)
+    raise CheckFailed(f"window width never settled (last {last})")
+
+
+def holds_columns(server, session, columns, seconds):
+    """True when the window stays `columns` wide for `seconds` (longer than tmux's one-second
+    subscription interval, so a wrong reaction to the change would have shown)."""
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if window_columns(server, session) != columns:
+            return False
+        time.sleep(0.1)
+    return True
+
+
+@test("T22", ["L1", "L2", "L3", "L5", "L6"],
+      "With window-size latest, a shared session is sized by the client the user used last",
+      needs=["rpc"])
+def t22_latest_client_sizing(ctx):
+    version = tmux_version(ctx.h.tmux_bin)
+    match = re.search(r"(\d+)\.(\d+)", version)
+    if not match or (int(match.group(1)), int(match.group(2))) < (3, 4):
+        raise Skipped(f"per-window sizes and the client loop need tmux 3.4 or later ({version})")
+    server = ctx.server("s22")
+    # Separators the roster value uses, in the session name: the session is compared inside
+    # tmux, so the name must not matter.
+    session = server.new_session("t22|a;b,c/d")
+    other = server.new_session("t22-other")
+    ctx.log(f"tmux {version}; window-size {server.run('show', '-gwv', 'window-size').stdout.strip()}")
+    mirror = ctx.mirror(server)
+    mirror.attach(session=session, activate=True)
+    expect_shapes(ctx, mirror, {session: [1]})
+    wait_until(lambda: server.control_clients(), timeout=10.0, what="the mirror's control client")
+    mirror_columns = settled_columns(server, session)
+    ctx.log(f"the mirror sizes the window to {mirror_columns} columns")
+    clients = []
+    ctx.on_cleanup(lambda: [c.close() for c in clients])
+
+    terminal = TerminalClient(server, session, mirror_columns + 37, 50)
+    clients.append(terminal)
+    terminal.type(" ")
+    try:
+        wait_until(lambda: window_columns(server, session) == terminal.columns, timeout=5.0,
+                   what=f"the window to take the terminal client's {terminal.columns} columns")
+        ctx.check(True, f"L1: typing in a {terminal.columns}-column terminal client sizes the window to it")
+    except CheckFailed as error:
+        ctx.check(False, f"L1: typing in the terminal client sizes the window to it "
+                         f"(window stays {window_columns(server, session)}, terminal {terminal.columns}): {error}")
+        return
+
+    pane = first_pane(server, session)
+    surface = surface_of(ctx, mirror, session, pane)
+    reply = ctx.h.cmux.call("surface.send_text", {"surface_id": surface, "text": "# t22 programmatic"})
+    ctx.check(reply.get("ok") is True, f"the socket send is accepted ({error_text(reply)})")
+    ctx.check(holds_columns(server, session, terminal.columns, 3.0),
+              "L3: a socket send to the mirrored pane leaves the window with the terminal client")
+
+    owner = ctx.h.cmux.workspace_of_surface(surface)
+    ctx.h.cmux.call("debug.app.activate", {})
+    if owner:
+        ctx.h.cmux.call("workspace.select", {"workspace_id": owner})
+    ctx.h.cmux.call("surface.focus", {"surface_id": surface})
+    reply = ctx.h.cmux.call("debug.type", {"text": "u"})
+    ctx.check(reply.get("ok") is True, f"typing into the mirrored pane is accepted ({error_text(reply)})")
+    try:
+        wait_until(lambda: window_columns(server, session) == mirror_columns, timeout=5.0,
+                   what="the window to return to the mirror's size")
+        ctx.check(True, "L2: typing in the mirror sizes the window to the mirror again")
+    except CheckFailed as error:
+        ctx.check(False, f"L2: typing in the mirror sizes the window to the mirror again "
+                         f"(window {window_columns(server, session)}): {error}")
+
+    # L6: another mirror. One that attaches already standing aside is not the user using it;
+    # one that takes the session back (clears ignore-size and claims the window) is.
+    second = TerminalClient(server, session, 80, 24, control_flags="ignore-size")
+    clients.append(second)
+    second.type(f"refresh-client -C {mirror_columns + 80}x50\n")
+    ctx.check(holds_columns(server, session, mirror_columns, 3.0),
+              "L6: a second mirror that attaches standing aside leaves the window with this mirror")
+    second.type("refresh-client -f '!ignore-size'\nselect-window\n")
+    try:
+        wait_until(lambda: window_columns(server, session) == mirror_columns + 80, timeout=5.0,
+                   what="the window to follow the second mirror once it takes the session")
+        ctx.check(True, "L6: when a second mirror takes the session, this mirror stands aside for it")
+    except CheckFailed as error:
+        ctx.check(False, f"L6: this mirror stands aside for a second mirror "
+                         f"(window {window_columns(server, session)}): {error}")
+
+    elsewhere = TerminalClient(server, other, mirror_columns + 61, 50)
+    clients.append(elsewhere)
+    elsewhere.type(" ")
+    ctx.check(holds_columns(server, session, mirror_columns + 80, 3.0),
+              "a client used in another session leaves this session's window alone")
+
+    terminal.type(" ")
+    try:
+        wait_until(lambda: window_columns(server, session) == terminal.columns, timeout=5.0,
+                   what="the window to follow the terminal client again")
+        ctx.check(True, "L1: the window follows the terminal client again after it is used again")
+    except CheckFailed as error:
+        ctx.check(False, f"L1: the window follows the terminal client again: {error}")
+
+    server.run("set-option", "-gw", "window-size", "smallest")
+    ctx.on_cleanup(lambda: server.run("set-option", "-gw", "window-size", "latest", check=False))
+    terminal.type(" ")
+    try:
+        wait_until(lambda: window_columns(server, session) == mirror_columns, timeout=5.0,
+                   what="window-size smallest to give the smaller (mirror's) size")
+        ctx.check(True, "L5: under window-size smallest the mirror takes part in sizing as before")
+    except CheckFailed as error:
+        ctx.check(False, f"L5: under window-size smallest the window is the smaller size "
+                         f"({window_columns(server, session)}): {error}")
 
 
 # --------------------------------------------------------------------------------------------
