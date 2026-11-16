@@ -87,6 +87,7 @@ extension RemoteTmuxControlConnection {
         if isSharedViewStream { subscribeSessionDigest() }
         requestWindows()
         if !isSharedViewStream { subscribeSessionDigest() }
+        subscribeClientRoster()
     }
 
     /// A ``windowOrderSubscriptionName`` push. The session's windows changed order with no

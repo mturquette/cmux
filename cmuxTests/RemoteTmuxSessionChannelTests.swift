@@ -165,6 +165,7 @@ private final class ReconnectFanOutFakeSource: RemoteTmuxSessionSource {
     }
     @discardableResult func sendKeys(paneId: Int, data: Data) -> Bool { true }
     @discardableResult func sendKey(paneId: Int, key: RemoteTmuxKeyName) -> Bool { true }
+    func noteUserInputForSizing() {}
     func beginReconnecting(preservingBackoff: Bool) {}
     func resumeAfterInteractiveAuth() {}
     @discardableResult func seedPane(paneId: Int, clearScrollback: Bool) -> UUID? { nil }

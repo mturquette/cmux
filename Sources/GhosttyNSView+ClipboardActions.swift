@@ -3,8 +3,11 @@ import CmuxTerminal
 import CmuxTerminalCore
 
 extension GhosttyNSView {
+    /// Called only from AppKit's direct input paths (key down, committed text,
+    /// paste commands), never for socket or CLI sends.
     func recordDirectAgentHibernationTerminalInput() {
         guard let terminalSurface else { return }
+        terminalSurface.onDirectUserInput?()
         GhosttyApp.terminalSurfaceRuntimeDependencies
             .hibernationRecorder.recordTerminalInput(
                 workspaceId: terminalSurface.tabId,

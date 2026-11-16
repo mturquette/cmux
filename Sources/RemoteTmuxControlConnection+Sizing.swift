@@ -235,6 +235,8 @@ extension RemoteTmuxControlConnection {
         windowId: Int, layoutColumns: Int, layoutRows: Int
     ) {
         guard supportsPerWindowSize else { return }
+        // Standing aside, the window follows another client on purpose.
+        guard !isStandingAsideForOtherClient else { return }
         guard let desired = lastWindowSizes[windowId] else { return }
         if Self.windowMatchesClaim(
             windowColumns: layoutColumns, windowRows: layoutRows,
