@@ -78,7 +78,52 @@ public struct RemoteTmuxClientRoster: Equatable, Sendable {
     /// is what a server older than 3.4 produces: the caller then treats the
     /// server as one where it cannot tell which client is in use.
     public init?(subscriptionValue value: String) {
-        return nil
+        let fields = value.split(separator: "|", maxSplits: 2, omittingEmptySubsequences: false)
+        guard fields.count == 3 else { return nil }
+        let selfName = String(fields[0])
+        let windowSize = String(fields[1])
+        guard !selfName.isEmpty, !windowSize.isEmpty else { return nil }
+        let entries = fields[2].split(separator: ";", omittingEmptySubsequences: true)
+        guard fields[2].isEmpty || fields[2].hasSuffix(";") else { return nil }
+        var peers: [Peer] = []
+        var sawSelf = false
+        for entry in entries {
+            let parts = entry.split(separator: "/", omittingEmptySubsequences: false)
+            // A client name is a tty path, which itself contains slashes, so
+            // the five fixed fields are read from the end.
+            guard parts.count >= 6 else { return nil }
+            let tail = parts.suffix(5)
+            let name = parts.dropLast(5).joined(separator: "/")
+            let fields = Array(tail)
+            guard !name.isEmpty,
+                  let control = Int(fields[0]), control == 0 || control == 1,
+                  let activity = Int(fields[1]),
+                  let columns = Int(fields[2]),
+                  fields[4] == "0" || fields[4] == "1" else { return nil }
+            let rows: Int?
+            if fields[3].isEmpty {
+                rows = nil
+            } else {
+                guard let parsed = Int(fields[3]) else { return nil }
+                rows = parsed
+            }
+            if name == selfName {
+                sawSelf = true
+                continue
+            }
+            peers.append(Peer(
+                name: name,
+                isControlClient: control == 1,
+                activity: activity,
+                columns: columns,
+                rows: rows,
+                ignoresSize: fields[4] == "1"
+            ))
+        }
+        // The subscriber is attached to the session it subscribed on, so a
+        // list without it is not a client list.
+        guard sawSelf else { return nil }
+        self.init(windowSize: windowSize, peers: peers)
     }
 
     /// Whether the session's current window is sized by `window-size latest`.
@@ -96,6 +141,19 @@ public struct RemoteTmuxClientRoster: Equatable, Sendable {
     /// mirror that attaches already ignoring sizes, or that starts ignoring
     /// them, does not count, and neither does a client detaching.
     public func showsUseOfAnotherClient(since previous: RemoteTmuxClientRoster) -> Bool {
-        false
+        var before: [String: Peer] = [:]
+        for peer in previous.peers { before[peer.name] = peer }
+        for peer in peers {
+            guard let old = before[peer.name] else {
+                if peer.isControlClient && peer.ignoresSize { continue }
+                return true
+            }
+            if peer.activity > old.activity { return true }
+            if !peer.isControlClient, peer.columns != old.columns || peer.rows != old.rows {
+                return true
+            }
+            if peer.isControlClient, old.ignoresSize, !peer.ignoresSize { return true }
+        }
+        return false
     }
 }

@@ -188,6 +188,13 @@ final class RemoteTmuxControlConnection {
     var isSharedViewStream = false
     /// Whether the stream's order digest (see ``subscribeSessionDigest()``) is subscribed.
     var sessionDigestSubscribed = false
+    /// Whether the session's client roster (see ``subscribeClientRoster()``) is subscribed.
+    var clientRosterSubscribed = false
+    /// The last client roster tmux pushed, the baseline the next one is compared with.
+    var clientRoster: RemoteTmuxClientRoster?
+    /// Whether this mirror has set tmux's `ignore-size` flag because the user
+    /// used another client. Kept across reconnects; see ``subscribeClientRoster()``.
+    var isStandingAsideForOtherClient = false
     var newWindowCompletions: [UUID: (Int?) -> Void] = [:]
     var newPaneCompletions: [UUID: (Int?) -> Void] = [:]
     /// Completions for ``sendTracked(_:completion:)`` blocks, keyed by the
@@ -1472,6 +1479,7 @@ final class RemoteTmuxControlConnection {
         // `subscribeSessionDigest()` again, and it returns early unless this flag is
         // cleared here — leaving the stream blind to session changes and window reorders.
         sessionDigestSubscribed = false
+        clientRosterSubscribed = false
         pendingPostAttachAction = nil
         teardownProcessHandles()
         // An attach that held is a working connection, whatever took it down, so the next retry
@@ -1806,6 +1814,7 @@ final class RemoteTmuxControlConnection {
                 // coordinator's in-flight reconcile guard).
                 observers.notifyTopologyChanged()
             } else if name == Self.windowOrderSubscriptionName { handleWindowOrderDigest(value) }
+            else if name == Self.clientRosterSubscriptionName { handleClientRoster(value) }
         case let .commandResult(_, lines, isError):
             // The first block on each control stream is the attach command's own —
             // consume it explicitly so it can never pop a queued command's slot off
