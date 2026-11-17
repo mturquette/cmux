@@ -31,6 +31,8 @@ public struct RemoteTmuxClientRoster: Equatable, Sendable {
         public let rows: Int?
         /// Whether the client has set tmux's `ignore-size` flag.
         public let ignoresSize: Bool
+        /// Whether tmux has the client marked focused.
+        public let isFocused: Bool
 
         public init(
             name: String,
@@ -38,8 +40,10 @@ public struct RemoteTmuxClientRoster: Equatable, Sendable {
             activity: Int,
             columns: Int,
             rows: Int?,
-            ignoresSize: Bool
+            ignoresSize: Bool,
+            isFocused: Bool = true
         ) {
+            self.isFocused = isFocused
             self.name = name
             self.isControlClient = isControlClient
             self.activity = activity
@@ -54,9 +58,12 @@ public struct RemoteTmuxClientRoster: Equatable, Sendable {
     /// The other clients attached to the session, in tmux's order. The
     /// subscribing client itself is never listed.
     public let peers: [Peer]
+    /// The session's current window (`@id`), when tmux reported one.
+    public let currentWindowId: Int?
 
-    public init(windowSize: String, peers: [Peer]) {
+    public init(windowSize: String, currentWindowId: Int? = nil, peers: [Peer]) {
         self.windowSize = windowSize
+        self.currentWindowId = currentWindowId
         self.peers = peers
     }
 

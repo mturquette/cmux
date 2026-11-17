@@ -8630,8 +8630,7 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
         let shouldForwardTerminalActivation = terminalPointerShouldForwardActivation()
         // Treat pointer-down as explicit focus intent before forwarding any terminal activation.
         focusFromPointerDown()
-        // A click is the user choosing this surface, like a focus event in a terminal.
-        terminalSurface?.onDirectUserInput?()
+        noteDirectPointerPress()
         guard shouldForwardTerminalActivation else { return }
         guard let surface = surface else { return }
         // Focus activation can synchronously reparent or resize the portal.

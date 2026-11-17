@@ -188,13 +188,8 @@ final class RemoteTmuxControlConnection {
     var isSharedViewStream = false
     /// Whether the stream's order digest (see ``subscribeSessionDigest()``) is subscribed.
     var sessionDigestSubscribed = false
-    /// Whether the session's client roster (see ``subscribeClientRoster()``) is subscribed.
-    var clientRosterSubscribed = false
-    /// The last client roster tmux pushed, the baseline the next one is compared with.
-    var clientRoster: RemoteTmuxClientRoster?
-    /// Whether this mirror has set tmux's `ignore-size` flag because the user
-    /// used another client. Kept across reconnects; see ``subscribeClientRoster()``.
-    var isStandingAsideForOtherClient = false
+    /// Latest-client sizing; see `RemoteTmuxControlConnection+LatestClientSizing.swift`.
+    var latestClientSizing = RemoteTmuxLatestClientSizingState()
     var newWindowCompletions: [UUID: (Int?) -> Void] = [:]
     var newPaneCompletions: [UUID: (Int?) -> Void] = [:]
     /// Completions for ``sendTracked(_:completion:)`` blocks, keyed by the
@@ -1479,7 +1474,7 @@ final class RemoteTmuxControlConnection {
         // `subscribeSessionDigest()` again, and it returns early unless this flag is
         // cleared here — leaving the stream blind to session changes and window reorders.
         sessionDigestSubscribed = false
-        clientRosterSubscribed = false
+        latestClientSizing.subscribed = false
         pendingPostAttachAction = nil
         teardownProcessHandles()
         // An attach that held is a working connection, whatever took it down, so the next retry
@@ -1546,7 +1541,7 @@ final class RemoteTmuxControlConnection {
     private func attemptReconnectSpawn() {
         record("reconnect-attempt")
         do {
-            try spawnProcess(mode: everReachedControlMode ? .attach : attachMode)
+            try spawnProcess(mode: everReachedControlMode ? reconnectAttachMode : attachMode)
         } catch {
             scheduleReconnectAttempt()
         }

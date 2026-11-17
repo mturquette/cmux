@@ -60,7 +60,7 @@ extension RemoteTmuxSessionMirror {
                 // this pane focused, is what lets this mirror size the session
                 // again after another tmux client was used.
                 panel?.surface.onDirectUserInput = { [weak self] in
-                    self?.connection.noteUserInputForSizing()
+                    self?.connection.noteUserInputForSizing(windowId: windowId)
                 }
                 return panel
             }
