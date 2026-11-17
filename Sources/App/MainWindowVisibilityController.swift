@@ -28,7 +28,7 @@ final class MainWindowVisibilityController {
         /// in answer to a person's click, key or Dock action.
         var isSelfInitiated: Bool {
             switch self {
-            case .socketActivate, .focusMainWindow, .workspaceCreation, .createMainWindow, .ensureInitialWindow:
+            case .socketActivate, .focusMainWindow, .workspaceCreation, .createMainWindow, .ensureInitialWindow, .feedback:
                 return true
             default:
                 return false
