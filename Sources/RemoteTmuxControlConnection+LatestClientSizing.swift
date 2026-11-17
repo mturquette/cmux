@@ -101,6 +101,11 @@ extension RemoteTmuxControlConnection {
               supportsPerWindowSize,
               !latestClientSizing.isStandingAside,
               roster.showsUseOfAnotherClient(since: previous) else { return }
+        if let input = latestClientSizing.lastDirectUserInputAt,
+           ContinuousClock.now - input < Self.lateRosterReportWindow {
+            note("latest-size late-report-ignored")
+            return
+        }
         latestClientSizing.isStandingAside = true
         note("latest-size stand-aside")
         send("refresh-client -f ignore-size")
@@ -133,7 +138,7 @@ extension RemoteTmuxControlConnection {
     /// `ignore-size` already set, so another mirror never sees it as a fresh,
     /// unflagged client and stands aside for it by mistake.
     var reconnectAttachMode: RemoteTmuxControlAttachMode {
-        .attach
+        latestClientSizing.isStandingAside ? .attachIgnoringSize : .attach
     }
 
     /// tmux does not recompute window sizes when a client's flags change, so
