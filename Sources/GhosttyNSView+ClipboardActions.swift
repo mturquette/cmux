@@ -3,29 +3,6 @@ import CmuxTerminal
 import CmuxTerminalCore
 
 extension GhosttyNSView {
-    /// Called only from AppKit's direct input paths (key down, committed text,
-    /// paste commands), never for socket or CLI sends.
-    func recordDirectAgentHibernationTerminalInput() {
-        guard let terminalSurface else { return }
-        terminalSurface.onDirectUserInput?()
-        GhosttyApp.terminalSurfaceRuntimeDependencies
-            .hibernationRecorder.recordTerminalInput(
-                workspaceId: terminalSurface.tabId,
-                panelId: terminalSurface.id
-            )
-    }
-
-    /// Reports the app becoming active as direct input to this focused surface,
-    /// but only when the event AppKit is handling shows a person caused it
-    /// (a click, a key press, or the window server's Dock or Command-Tab
-    /// activation). cmux's own activations run outside such an event.
-    func noteAppActivationIfUserCaused() {
-        guard let terminalSurface,
-              TerminalUserActivation(event: NSApp.currentEvent, now: ProcessInfo.processInfo.systemUptime).isUserCaused
-        else { return }
-        terminalSurface.onDirectUserInput?()
-    }
-
     @IBAction func paste(_ sender: Any?) {
         guard prepareSurfaceForPaste(reason: "paste.missingSurface") else {
             return

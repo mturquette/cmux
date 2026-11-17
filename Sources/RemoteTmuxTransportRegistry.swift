@@ -108,6 +108,9 @@ enum RemoteTmuxControlAttachMode: Sendable, Equatable, Hashable {
     /// `attach-session -t <name>`: the session has to exist. Every reconnect uses this, so a
     /// session killed during an outage ends the connection instead of being silently recreated.
     case attach
+    /// `attach-session -f ignore-size -t <name>`: a reconnect of a mirror that was standing
+    /// aside for another client, so the new client is never seen without the flag.
+    case attachIgnoringSize
     /// `new-session -A -s <name>`: attach when it exists, create it otherwise.
     case attachOrCreate
     /// `new-session -A -s <name> -x <cols> -y <rows>`: attach or create at an explicit size.
@@ -134,6 +137,8 @@ enum RemoteTmuxControlAttachMode: Sendable, Equatable, Hashable {
         switch self {
         case .attach:
             return ["-CC", "attach-session", "-t", sessionName]
+        case .attachIgnoringSize:
+            return ["-CC", "attach-session", "-f", "ignore-size", "-t", sessionName]
         case .attachOrCreate:
             return ["-CC", "new-session", "-A", "-s", sessionName]
         case let .attachOrCreateSized(columns, rows):
