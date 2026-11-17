@@ -25,6 +25,18 @@ final class MainWindowVisibilityController {
         case workspaceCreation
     }
 
+    /// When cmux last asked macOS to activate it on its own behalf (a socket or
+    /// CLI command, a window it created), so an app activation that follows can
+    /// be told apart from the user's Dock click or Command-Tab. A monotonic
+    /// instant; nil until such a request is made.
+    private(set) var lastSelfInitiatedActivationAt: ContinuousClock.Instant?
+
+    /// Whether cmux asked to be activated within `window` of now.
+    func requestedOwnActivation(within window: Duration) -> Bool {
+        guard let at = lastSelfInitiatedActivationAt else { return false }
+        return ContinuousClock.now - at < window
+    }
+
     enum Activation {
         case none
         case runningApplication(NSApplication.ActivationOptions)
