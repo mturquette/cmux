@@ -23,6 +23,17 @@ final class MainWindowVisibilityController {
         case titlebarDismiss
         case socketActivate
         case workspaceCreation
+
+        /// Whether cmux asks for this activation on its own behalf rather than
+        /// in answer to a person's click, key or Dock action.
+        var isSelfInitiated: Bool {
+            switch self {
+            case .socketActivate, .focusMainWindow, .workspaceCreation, .createMainWindow, .ensureInitialWindow:
+                return true
+            default:
+                return false
+            }
+        }
     }
 
     /// When cmux last asked macOS to activate it on its own behalf (a socket or
@@ -199,14 +210,14 @@ final class MainWindowVisibilityController {
         let effectiveActivation = activationRequiringKeyTransfer(activation, makeKey: makeKey)
 
         if activationTiming == .beforeWindowOrdering {
-            activate(effectiveActivation)
+            activate(effectiveActivation, reason: reason)
         }
         let shouldActivateBeforeWindowOrdering = activationTiming == .afterWindowOrdering &&
             deminiaturize &&
             dependencies.windowOperations.isMiniaturized(window)
         if shouldActivateBeforeWindowOrdering {
             trace("focus.activate.beforeMiniaturize.begin", reason: reason, windows: [window])
-            activate(effectiveActivation)
+            activate(effectiveActivation, reason: reason)
             trace("focus.activate.beforeMiniaturize.end", reason: reason, windows: [window])
         }
         if deminiaturize, dependencies.windowOperations.isMiniaturized(window) {
@@ -226,7 +237,7 @@ final class MainWindowVisibilityController {
         }
         if activationTiming == .afterWindowOrdering && !shouldActivateBeforeWindowOrdering {
             trace("focus.activate.begin", reason: reason, windows: [window])
-            activate(effectiveActivation)
+            activate(effectiveActivation, reason: reason)
             trace("focus.activate.end", reason: reason, windows: [window])
         }
         log("focus", reason: reason, windows: [window])
@@ -255,7 +266,7 @@ final class MainWindowVisibilityController {
         }
         if !dependencies.isApplicationActive() {
             trace("focus.inWindow.activate.begin", reason: reason, windows: [window])
-            activate(.runningApplication([.activateAllWindows]))
+            activate(.runningApplication([.activateAllWindows]), reason: reason)
             trace("focus.inWindow.activate.end", reason: reason, windows: [window])
         }
         if dependencies.windowOperations.isMiniaturized(window) {
@@ -454,7 +465,7 @@ final class MainWindowVisibilityController {
         }
         let effectiveActivation = activationRequiringKeyTransfer(activation, makeKey: makeKey)
         trace("reveal.activate.begin", reason: reason, windows: windows)
-        activate(effectiveActivation)
+        activate(effectiveActivation, reason: reason)
         trace("reveal.activate.end", reason: reason, windows: windows)
 
         let focusWindow = resolvedPreferredFocusWindow(preferredWindow: preferredWindow, in: windows)
@@ -520,11 +531,12 @@ final class MainWindowVisibilityController {
             ?? windows.first
     }
 
-    private func activate(_ activation: Activation) {
+    private func activate(_ activation: Activation, reason: Reason) {
         switch activation {
         case .none:
             break
         case .runningApplication(let options):
+            if reason.isSelfInitiated { lastSelfInitiatedActivationAt = .now }
             dependencies.activateRunningApplication(options)
         }
     }

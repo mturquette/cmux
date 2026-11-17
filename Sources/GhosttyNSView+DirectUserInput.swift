@@ -41,7 +41,12 @@ extension GhosttyNSView {
             "subtype=\(subtype) age=\(age)"
         )
         #endif
-        guard judged.isUserCaused else { return }
+        // macOS answers cmux's own activation request with the same event a
+        // Dock click or Command-Tab produces, so a request cmux made itself
+        // just before rules the activation out.
+        let requestedByCmux = AppDelegate.shared?.mainWindowVisibilityController
+            .requestedOwnActivation(within: .seconds(TerminalUserActivation.freshness)) ?? false
+        guard judged.isUserCaused, !requestedByCmux else { return }
         terminalSurface.onDirectUserInput?()
     }
 }
