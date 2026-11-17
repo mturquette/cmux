@@ -15,6 +15,17 @@ extension GhosttyNSView {
             )
     }
 
+    /// Reports the app becoming active as direct input to this focused surface,
+    /// but only when the event AppKit is handling shows a person caused it
+    /// (a click, a key press, or the window server's Dock or Command-Tab
+    /// activation). cmux's own activations run outside such an event.
+    func noteAppActivationIfUserCaused() {
+        guard let terminalSurface,
+              TerminalUserActivation(event: NSApp.currentEvent, now: ProcessInfo.processInfo.systemUptime).isUserCaused
+        else { return }
+        terminalSurface.onDirectUserInput?()
+    }
+
     @IBAction func paste(_ sender: Any?) {
         guard prepareSurfaceForPaste(reason: "paste.missingSurface") else {
             return
