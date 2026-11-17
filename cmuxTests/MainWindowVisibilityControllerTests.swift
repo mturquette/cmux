@@ -500,6 +500,24 @@ final class MainWindowVisibilityControllerTests: XCTestCase {
         XCTAssertFalse(controller.requestedOwnActivation(within: .zero))
     }
 
+    /// The feedback socket command activates cmux through `.feedback`; that is
+    /// cmux's own request, not the user switching to it (second review).
+    func testFeedbackActivationIsSelfInitiated() {
+        let window = makeWindow()
+        defer { window.orderOut(nil) }
+        let controller = MainWindowVisibilityController(
+            dependencies: .init(
+                isActivationSuppressed: { false },
+                setActiveMainWindow: { _ in },
+                isApplicationActive: { false },
+                activateRunningApplication: { _ in },
+                windowOperations: makeWindowOperations()
+            )
+        )
+        _ = controller.focus(window, reason: .feedback)
+        XCTAssertTrue(controller.requestedOwnActivation(within: .seconds(1)))
+    }
+
     func testFocusWithoutActivationIsNotRecorded() {
         let window = makeWindow()
         defer { window.orderOut(nil) }

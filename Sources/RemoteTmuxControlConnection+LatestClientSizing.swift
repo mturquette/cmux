@@ -134,6 +134,12 @@ extension RemoteTmuxControlConnection {
         send("select-window")
     }
 
+    /// The mode a reconnect spawns with: the attach mode below once the stream
+    /// has reached control mode, otherwise the mode the connection was opened with.
+    var reconnectSpawnMode: RemoteTmuxControlAttachMode {
+        everReachedControlMode ? reconnectAttachMode : attachMode
+    }
+
     /// The attach mode for a reconnect: a mirror standing aside comes back with
     /// `ignore-size` already set, so another mirror never sees it as a fresh,
     /// unflagged client and stands aside for it by mistake.
