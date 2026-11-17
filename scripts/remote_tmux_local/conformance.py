@@ -1223,6 +1223,11 @@ def t22_latest_client_sizing(ctx):
     ctx.check(reply.get("ok") is True, f"the socket send is accepted ({error_text(reply)})")
     ctx.check(holds_columns(server, session, terminal.columns, 3.0),
               "L3: a socket send to the mirrored pane leaves the window with the terminal client")
+    # cmux activating itself (here through the socket) is not the user switching to it.
+    ctx.h.cmux.call("debug.app.activate", {})
+    ctx.h.cmux.call("surface.focus", {"surface_id": surface})
+    ctx.check(holds_columns(server, session, terminal.columns, 3.0),
+              "L3: cmux activating itself and focusing the pane leaves the window with the terminal client")
 
     owner = ctx.h.cmux.workspace_of_surface(surface)
     ctx.h.cmux.call("debug.app.activate", {})
