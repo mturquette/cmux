@@ -55,6 +55,9 @@ extension RemoteTmuxControlConnection {
             // sizing again as that setting expects, without claiming activity.
             isStandingAsideForOtherClient = false
             record("latest-size rejoin window-size=\(roster.windowSize)")
+        #if DEBUG
+        cmuxDebugLog("remote.latest-size rejoin window-size=\(roster.windowSize)")
+        #endif
             send("refresh-client -f '!ignore-size'")
             nudgeSizeRecalculation()
             return
@@ -66,6 +69,9 @@ extension RemoteTmuxControlConnection {
               roster.showsUseOfAnotherClient(since: previous) else { return }
         isStandingAsideForOtherClient = true
         record("latest-size stand-aside")
+        #if DEBUG
+        cmuxDebugLog("remote.latest-size stand-aside")
+        #endif
         send("refresh-client -f ignore-size")
         nudgeSizeRecalculation()
     }
@@ -81,6 +87,9 @@ extension RemoteTmuxControlConnection {
         guard isStandingAsideForOtherClient, connectionState == .connected else { return }
         isStandingAsideForOtherClient = false
         record("latest-size take-back")
+        #if DEBUG
+        cmuxDebugLog("remote.latest-size take-back")
+        #endif
         send("refresh-client -f '!ignore-size'")
         send("select-window")
     }

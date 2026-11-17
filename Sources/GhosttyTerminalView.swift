@@ -1099,6 +1099,11 @@ class GhosttyApp {
             object: nil,
             queue: .main
         ) { [weak self] _ in
+            // Switching to cmux counts as using the focused terminal, when a
+            // person caused it (see GhosttyNSView.noteAppActivationIfUserCaused).
+            MainActor.assumeIsolated {
+                (NSApp.keyWindow?.firstResponder as? GhosttyNSView)?.noteAppActivationIfUserCaused()
+            }
             guard let app = self?.app else { return }
             ghostty_app_set_focus(app, true)
         })
@@ -8625,6 +8630,8 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
         let shouldForwardTerminalActivation = terminalPointerShouldForwardActivation()
         // Treat pointer-down as explicit focus intent before forwarding any terminal activation.
         focusFromPointerDown()
+        // A click is the user choosing this surface, like a focus event in a terminal.
+        terminalSurface?.onDirectUserInput?()
         guard shouldForwardTerminalActivation else { return }
         guard let surface = surface else { return }
         // Focus activation can synchronously reparent or resize the portal.

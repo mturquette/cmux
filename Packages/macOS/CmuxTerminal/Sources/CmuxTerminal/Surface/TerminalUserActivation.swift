@@ -31,6 +31,18 @@ public struct TerminalUserActivation: Equatable, Sendable {
 
     /// The same judgement from an event's parts, for callers and tests that have no `NSEvent`.
     public init(type: NSEvent.EventType, subtype: Int16?, timestamp: TimeInterval, now: TimeInterval) {
-        isUserCaused = false
+        let age = now - timestamp
+        guard age >= 0, age <= Self.freshness else {
+            isUserCaused = false
+            return
+        }
+        switch type {
+        case .leftMouseDown, .rightMouseDown, .otherMouseDown, .keyDown:
+            isUserCaused = true
+        case .appKitDefined:
+            isUserCaused = subtype == NSEvent.EventSubtype.applicationActivated.rawValue
+        default:
+            isUserCaused = false
+        }
     }
 }
