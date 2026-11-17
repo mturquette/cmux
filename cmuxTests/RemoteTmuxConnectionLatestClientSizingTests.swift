@@ -220,13 +220,19 @@ import Testing
         #expect(!aside.connection.latestClientSizing.subscribed)
         let again = reattach(aside, label: "latest-size-reconnect-b")
         again.connection.handleMessageForTesting(.enter)
-        again.connection.handleMessageForTesting(.commandResult(commandNumber: 0, lines: [], isError: false))
+        // Only the real spawn re-arms the attach-block drain, so the test runs
+        // the post-attach step it triggers, as the environment-push tests do.
+        again.connection.subscribeClientRoster()
         #expect(again.connection.latestClientSizing.isStandingAside)
-        #expect(try sizingCommands(again) == [
-            RemoteTmuxControlConnection.clientRosterSubscriptionCommand,
-            "refresh-client -f ignore-size",
-            "refresh-client -C 120x40",
-        ])
+        // The reattach also replays the recorded sizes, so only the order of
+        // this change's own commands, and the absence of a take-back, matter.
+        let commands = try sizingCommands(again)
+        let subscribed = try #require(commands.firstIndex(of: RemoteTmuxControlConnection.clientRosterSubscriptionCommand))
+        let flagged = try #require(commands.firstIndex(of: "refresh-client -f ignore-size"))
+        #expect(flagged > subscribed)
+        #expect(commands.suffix(from: flagged).contains("refresh-client -C 120x40"))
+        #expect(!commands.contains("refresh-client -f '!ignore-size'"))
+        #expect(!commands.contains("select-window"))
     }
 
     @Test func aReconnectWhileNotStandingAsideUsesThePlainAttach() {
