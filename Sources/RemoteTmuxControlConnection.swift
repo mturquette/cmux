@@ -1580,7 +1580,9 @@ final class RemoteTmuxControlConnection {
             } catch {
                 return
             }
-            guard let self, self.connectionState == .reconnecting else { return }
+            // A stream held for wake recovery cancels this task; the held check is the second
+            // safeguard, so a missed cancel can never spawn over the old master while it is held.
+            guard let self, self.connectionState == .reconnecting, !self.reconnectHeldForWake else { return }
             self.attemptReconnectSpawn()
         }
     }
