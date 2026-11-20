@@ -9714,19 +9714,18 @@ final class Workspace: Identifiable, ObservableObject, FilePreviewTabMetadataHos
             let inheritSourcePanelId = inheritWorkingDirectoryFallback
                 ? anchorPanelId ?? selectedTerminalPanelId(inPane: paneId)
                 : nil
-            let resolvedWorkingDirectory: String?
-            if let inheritSourcePanelId {
-                resolvedWorkingDirectory = remoteTmuxNewWindowWorkingDirectory(forSourcePanelId: inheritSourcePanelId)
-            } else {
-                resolvedWorkingDirectory = nil
+            let resolvedWorkingDirectory = inheritSourcePanelId.flatMap {
+                remoteTmuxNewWindowWorkingDirectory(forSourcePanelId: $0)
             }
+            // Starting input (an action's command) is typed into the new window.
             let routed = AppDelegate.shared?.remoteTmuxController
                 .handleMirrorNewTabRequested(
                     workspaceId: id,
                     placement: placement,
                     workingDirectory: resolvedWorkingDirectory,
                     workingDirectorySourcePanelId: inheritSourcePanelId,
-                    focus: focus ?? (bonsplitController.focusedPaneId == paneId)
+                    focus: focus ?? (bonsplitController.focusedPaneId == paneId),
+                    startingInput: initialInput
                 ) ?? false
             return routed ? .routedToRemote : .failed
         }
