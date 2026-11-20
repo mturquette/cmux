@@ -221,8 +221,29 @@ actor RemoteTmuxSSHTransport {
         }
         let task = Task { try await self.performMasterReady() }
         readinessTask = task
-        defer { readinessTask = nil }
+        // Cleared only if still ours: a wake renewal may have installed its own task since.
+        defer { if readinessTask == task { readinessTask = nil } }
         return try await task.value
+    }
+
+    /// Closes the shared master and confirms a fresh one, as the warm-up every later caller joins.
+    ///
+    /// A warm-up already in flight may have seen the old master answer `-O check`, so it is left
+    /// to finish and never joined. Checking for it and installing this task is one synchronous
+    /// actor step, so a ``ensureMasterReady()`` caller that arrives afterwards joins the renewal
+    /// and gets the fresh master's result.
+    func closeAndReopenMaster() async -> Bool {
+        while let earlier = readinessTask {
+            _ = try? await earlier.value
+            if readinessTask == earlier { break }
+        }
+        let task = Task { () async throws -> Bool in
+            await self.shutdownMaster()
+            return try await self.performMasterReady()
+        }
+        readinessTask = task
+        defer { if readinessTask == task { readinessTask = nil } }
+        return (try? await task.value) ?? false
     }
 
     /// The actual warmup, run exactly once per ``readinessTask`` (see
