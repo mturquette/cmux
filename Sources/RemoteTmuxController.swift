@@ -1,4 +1,5 @@
 import AppKit
+import CmuxCloud
 import Foundation
 import CmuxSettings
 import Observation
@@ -56,7 +57,8 @@ final class RemoteTmuxController {
     lazy var wakeRecovery = RemoteTmuxWakeRecoveryCoordinator(
         environment: RemoteTmuxLiveWakeRecoveryEnvironment(
             transportRegistry: transportRegistry, screenUnlockGate: RemoteTmuxScreenUnlockGate()
-        )
+        ),
+        remoteConnectionsAllowed: { ManagedRemoteConnectionsPolicy.isEnabled }
     )
 
     /// How long a shared connection's attach may stay quiet in each phase before it is

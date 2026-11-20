@@ -23,6 +23,7 @@ import Foundation
 final class RemoteTmuxWakeRecoveryCoordinator {
     private let environment: any RemoteTmuxWakeRecoveryEnvironment
     private let checkTimeoutSeconds: Double
+    private let remoteConnectionsAllowed: @MainActor () -> Bool
     /// The recovery running for each host, keyed by ``RemoteTmuxHost/connectionHash``.
     private var recoveriesByHost: [String: Task<Void, Never>] = [:]
 
@@ -30,6 +31,8 @@ final class RemoteTmuxWakeRecoveryCoordinator {
     ///   - environment: the lock-screen and shared-connection steps.
     ///   - checkTimeoutSeconds: how long a connected stream has to answer its check. Five
     ///     seconds leaves room for a slow link while staying well under ssh's own detection.
+    ///   - remoteConnectionsAllowed: whether a managed-device policy allows remote connections
+    ///     right now (`DisableRemoteConnections` not in force). Read at each wake.
     init(
         environment: any RemoteTmuxWakeRecoveryEnvironment,
         checkTimeoutSeconds: Double = 5,
@@ -37,13 +40,16 @@ final class RemoteTmuxWakeRecoveryCoordinator {
     ) {
         self.environment = environment
         self.checkTimeoutSeconds = checkTimeoutSeconds
+        self.remoteConnectionsAllowed = remoteConnectionsAllowed
     }
 
-    /// Starts recovery for each group whose host has none in progress.
+    /// Starts recovery for each group whose host has none in progress. Starts nothing while a
+    /// managed-device policy disables remote connections, as `cmux ssh` does on wake.
     ///
     /// - Returns: the recoveries started by this call, so a caller can await them.
     @discardableResult
     func recover(_ groups: [RemoteTmuxWakeHostGroup]) -> [Task<Void, Never>] {
+        guard remoteConnectionsAllowed() else { return [] }
         var started: [Task<Void, Never>] = []
         for group in groups {
             let key = group.host.connectionHash
