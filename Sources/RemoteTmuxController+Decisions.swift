@@ -148,7 +148,8 @@ extension RemoteTmuxController {
         _ sessionName: String,
         sessionId: Int? = nil,
         workingDirectory: String?,
-        focus: Bool = false
+        focus: Bool = false,
+        reportsWindowId: Bool = false
     ) -> String {
         var command = focus
             ? "new-window -P -F '#{window_id}'"
@@ -218,7 +219,8 @@ extension RemoteTmuxController {
     nonisolated static func newWindowCommand(
         afterWindowId: Int?,
         workingDirectory: String?,
-        focus: Bool = false
+        focus: Bool = false,
+        reportsWindowId: Bool = false
     ) -> String {
         var command = focus
             ? "new-window -P -F '#{window_id}'"
