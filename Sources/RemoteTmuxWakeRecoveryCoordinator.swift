@@ -8,9 +8,10 @@ import Foundation
 /// So for a transport that declares ``RemoteTmuxWakeRecovery/checkThenRenewSharedConnection``:
 ///
 /// 1. Each connected stream gets one short command. Streams that answer are left alone, and the
-///    checks stop at the first silent stream.
-/// 2. If a stream was silent, or one was already reconnecting, every stream on the host is held:
-///    closing the shared master ends them all, so none may race a retry over it.
+///    checks stop at the first silent stream. If every connected stream answers, the master is
+///    alive: a stream waiting out its backoff retries now over it, and nothing is renewed.
+/// 2. If a stream was silent, or no stream is connected and one is reconnecting, every stream on
+///    the host is held: closing the shared master ends them all, so none may race a retry over it.
 /// 3. The coordinator waits until the screen is unlocked, renews the host's master once, and
 ///    releases the held streams to reconnect over the fresh master, so the user authenticates at
 ///    most once per host.
@@ -73,7 +74,14 @@ final class RemoteTmuxWakeRecoveryCoordinator {
     }
 
     private func checkThenRenewSharedConnection(_ group: RemoteTmuxWakeHostGroup) async {
-        guard await hostNeedsRenewal(group.streams) else { return }
+        guard await hostNeedsRenewal(group.streams) else {
+            // The connected streams just proved the master alive, so a stream waiting out its
+            // backoff can retry over it now, with nothing torn down.
+            for stream in group.streams where stream.wakeStreamPhase == .waitingToRetry {
+                stream.retryReconnectNow()
+            }
+            return
+        }
         var held: [any RemoteTmuxWakeRecoverableStream] = []
         for stream in group.streams where stream.holdReconnectForWake() {
             held.append(stream)
@@ -88,15 +96,22 @@ final class RemoteTmuxWakeRecoveryCoordinator {
         }
     }
 
+    /// Whether the host's shared master must be renewed.
+    ///
+    /// The connected streams are checked first, stopping at the first silent one. If every
+    /// connected stream answers, the master is alive and nothing is renewed, even when another
+    /// stream is reconnecting. With no connected stream to vouch for the master, a host whose
+    /// streams are reconnecting is renewed.
     private func hostNeedsRenewal(_ streams: [any RemoteTmuxWakeRecoverableStream]) async -> Bool {
-        let alreadyReconnecting = streams.contains {
-            $0.wakeStreamPhase == .waitingToRetry || $0.wakeStreamPhase == .retryInFlight
-        }
-        if alreadyReconnecting { return true }
+        var checkedAny = false
         for stream in streams where stream.wakeStreamPhase == .connected {
+            checkedAny = true
             let answered = await stream.answersWakeCheck(timeoutSeconds: checkTimeoutSeconds)
             if !answered { return true }
         }
-        return false
+        if checkedAny { return false }
+        return streams.contains {
+            $0.wakeStreamPhase == .waitingToRetry || $0.wakeStreamPhase == .retryInFlight
+        }
     }
 }
