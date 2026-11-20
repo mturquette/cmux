@@ -177,7 +177,8 @@ extension TerminalController {
         let unsupported = mirrorRoutedUnsupportedOptions(
             workingDirectory: inputs.workingDirectory,
             initialCommand: inputs.initialCommand,
-            initialInput: inputs.initialInput,
+            // A new tmux window carries its starting input (typed into it by window id).
+            initialInput: nil,
             tmuxStartCommand: inputs.tmuxStartCommand,
             startupEnvironment: inputs.startupEnvironment,
             remotePTYSessionID: inputs.remotePTYSessionID
@@ -186,7 +187,8 @@ extension TerminalController {
         let routed = AppDelegate.shared?.remoteTmuxController.handleMirrorNewTabRequested(
             workspaceId: workspace.id,
             targetPaneId: location.pane.tmuxPaneID,
-            focus: v2FocusAllowed(requested: inputs.requestedFocus)
+            focus: v2FocusAllowed(requested: inputs.requestedFocus),
+            startingInput: inputs.initialInput
         ) ?? false
         guard routed else { return .createFailed }
         return .routedToRemote(

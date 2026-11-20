@@ -48,7 +48,8 @@ extension RemoteTmuxController {
         placement: RemoteTmuxMirrorNewTabPlacement,
         workingDirectory: String?,
         workingDirectorySourcePanelId: UUID?,
-        focus: Bool
+        focus: Bool,
+        startingInput: String? = nil
     ) -> Bool {
         guard let mirror = sessionMirror(workspaceId: workspaceId),
               mirror.connection.connectionState == .connected else { return false }
@@ -68,7 +69,8 @@ extension RemoteTmuxController {
             through: mirror,
             afterWindowId: afterWindowId,
             workingDirectory: commandWorkingDirectory,
-            focus: focus
+            focus: focus,
+            startingInput: startingInput
         )
     }
 
@@ -78,7 +80,8 @@ extension RemoteTmuxController {
     func handleMirrorNewTabRequested(
         workspaceId: UUID,
         targetPaneId: Int,
-        focus: Bool
+        focus: Bool,
+        startingInput: String? = nil
     ) -> Bool {
         guard let mirror = sessionMirror(workspaceId: workspaceId),
               mirror.connection.connectionState == .connected,
@@ -89,7 +92,8 @@ extension RemoteTmuxController {
             through: mirror,
             afterWindowId: afterWindowId,
             workingDirectory: mirror.cwdByPane[targetPaneId],
-            focus: focus
+            focus: focus,
+            startingInput: startingInput
         )
     }
 
@@ -108,36 +112,48 @@ extension RemoteTmuxController {
         through mirror: RemoteTmuxSessionMirror,
         afterWindowId: Int?,
         workingDirectory: String?,
-        focus: Bool
+        focus: Bool,
+        startingInput: String?
     ) -> Bool {
+        let startingInput = startingInput.flatMap { $0.isEmpty ? nil : $0 }
         if isMultiplexed(mirror) {
             let command = Self.newWindowCommandInSession(
                 mirror.sessionName,
                 sessionId: mirror.connection.sessionId ?? mirror.seededSessionId,
                 workingDirectory: workingDirectory,
-                focus: focus
+                focus: focus,
+                reportsWindowId: startingInput != nil
             )
-            let sent = sendMirrorNewWindow(command, through: mirror, focus: focus)
+            let sent = sendMirrorNewWindow(command, through: mirror, focus: focus, startingInput: startingInput)
             if sent { multiplexedViewsByHost[mirror.host.connectionHash]?.requestReconcile() }
             return sent
         }
         let command = Self.newWindowCommand(
             afterWindowId: afterWindowId,
             workingDirectory: workingDirectory,
-            focus: focus
+            focus: focus,
+            reportsWindowId: startingInput != nil
         )
-        return sendMirrorNewWindow(command, through: mirror, focus: focus)
+        return sendMirrorNewWindow(command, through: mirror, focus: focus, startingInput: startingInput)
     }
 
+    /// Sends the `new-window`. When the window has starting input, or must be focused,
+    /// the reply to this exact command carries the new window's id; the input is then
+    /// typed into that window by id, so nothing reaches any other pane.
     private func sendMirrorNewWindow(
         _ command: String,
         through mirror: RemoteTmuxSessionMirror,
-        focus: Bool
+        focus: Bool,
+        startingInput: String?
     ) -> Bool {
-        guard focus else { return mirror.connection.send(command) }
+        guard focus || startingInput != nil else { return mirror.connection.send(command) }
         return mirror.connection.sendNewWindow(command) { [weak mirror] windowId in
-            guard let windowId else { return }
-            mirror?.focusWindowWhenAvailable(windowId)
+            guard let windowId, let mirror else { return }
+            if let startingInput,
+               let typing = Self.startingInputCommand(windowId: windowId, input: startingInput) {
+                mirror.connection.send(typing)
+            }
+            if focus { mirror.focusWindowWhenAvailable(windowId) }
         }
     }
 
@@ -148,11 +164,10 @@ extension RemoteTmuxController {
         _ sessionName: String,
         sessionId: Int? = nil,
         workingDirectory: String?,
-        focus: Bool = false
+        focus: Bool = false,
+        reportsWindowId: Bool = false
     ) -> String {
-        var command = focus
-            ? "new-window -P -F '#{window_id}'"
-            : "new-window -d"
+        var command = newWindowVerb(focus: focus, reportsWindowId: reportsWindowId)
         let sessionTarget = sessionId.map { "$\($0)" } ?? sessionName
         command += " -a -t \(RemoteTmuxHost.shellSingleQuoted("\(sessionTarget):{end}"))"
         if let directory = workingDirectory?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -218,11 +233,10 @@ extension RemoteTmuxController {
     nonisolated static func newWindowCommand(
         afterWindowId: Int?,
         workingDirectory: String?,
-        focus: Bool = false
+        focus: Bool = false,
+        reportsWindowId: Bool = false
     ) -> String {
-        var command = focus
-            ? "new-window -P -F '#{window_id}'"
-            : "new-window -d"
+        var command = newWindowVerb(focus: focus, reportsWindowId: reportsWindowId)
         command += afterWindowId.map { " -a -t @\($0)" } ?? " -a -t '{end}'"
         if let directory = workingDirectory?.trimmingCharacters(in: .whitespacesAndNewlines),
            !directory.isEmpty,

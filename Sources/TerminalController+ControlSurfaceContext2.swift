@@ -529,7 +529,8 @@ extension TerminalController {
             let unsupported = mirrorRoutedUnsupportedOptions(
                 workingDirectory: inputs.workingDirectory,
                 initialCommand: inputs.initialCommand,
-                initialInput: inputs.initialInput,
+                // A new tab carries its starting input into the new tmux window.
+                initialInput: nil,
                 tmuxStartCommand: inputs.tmuxStartCommand,
                 startupEnvironment: inputs.startupEnvironment,
                 remotePTYSessionID: inputs.remotePTYSessionID
