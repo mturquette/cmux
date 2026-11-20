@@ -18,7 +18,7 @@ final class RemoteTmuxLiveWakeRecoveryEnvironment: RemoteTmuxWakeRecoveryEnviron
         await screenUnlockGate.waitUntilUnlocked()
     }
 
-    func renewSharedConnection(for host: RemoteTmuxHost) async -> Bool {
+    func renewSharedConnection(for host: RemoteTmuxHost) async -> RemoteTmuxWakeRenewalResult {
         await transportRegistry.transport(for: host).renewSharedMaster()
     }
 

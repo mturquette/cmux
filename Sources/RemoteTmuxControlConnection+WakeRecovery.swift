@@ -20,4 +20,8 @@ extension RemoteTmuxControlConnection: RemoteTmuxWakeRecoverableStream {
             return false
         }
     }
+
+    func waitForReconnectOutcome() async -> RemoteTmuxWakeStreamPhase { .ended }
+
+    func handOverHeldStreamToLogin() {}
 }

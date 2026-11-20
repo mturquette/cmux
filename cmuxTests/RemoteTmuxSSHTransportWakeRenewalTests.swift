@@ -29,7 +29,10 @@ import Testing
     /// - Parameter holdFirstCheck: when true, the first `-O check` reads the master's state, logs
     ///   it, and then does not return until the test creates the `release` file, so a warm-up can be
     ///   caught after it has seen the old master but before it reports.
-    private func makeFakeSSH(openSucceeds: Bool, holdFirstCheck: Bool = false) throws -> FakeSSH {
+    /// - Parameter openStderr: what a failed open prints on stderr, as ssh would. No single quotes.
+    private func makeFakeSSH(
+        openSucceeds: Bool, holdFirstCheck: Bool = false, openStderr: String = ""
+    ) throws -> FakeSSH {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("remote-tmux-renew-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -38,7 +41,9 @@ import Testing
         let release = root.appendingPathComponent("release")
         let firstDone = root.appendingPathComponent("first-check-done")
         let executable = root.appendingPathComponent("ssh")
-        let open = openSucceeds ? "touch '\(marker.path)'; exit 0" : "exit 255"
+        let open = openSucceeds
+            ? "touch '\(marker.path)'; exit 0"
+            : "printf '%s\\n' '\(openStderr)' >&2; exit 255"
         if !holdFirstCheck { FileManager.default.createFile(atPath: release.path, contents: Data()) }
         try """
         #!/bin/sh
@@ -75,12 +80,13 @@ import Testing
 
         let renewed = await transport(ssh).renewSharedMaster()
 
-        #expect(renewed)
+        #expect(renewed == .renewed)
         #expect(ssh.calls() == ["exit", "check", "open", "check"])
     }
 
     // Adversarial: a fresh master that cannot be opened reports failure instead of claiming the
-    // stale one is still usable.
+    // stale one is still usable. With nothing on stderr to say the host is unreachable, the
+    // failure is not one a retry can fix (review F5).
     @Test(.timeLimit(.minutes(1)))
     func aMasterThatCannotBeReopenedReportsFailure() async throws {
         let ssh = try makeFakeSSH(openSucceeds: false)
@@ -88,8 +94,40 @@ import Testing
 
         let renewed = await transport(ssh).renewSharedMaster()
 
-        #expect(renewed == false)
+        #expect(renewed == .failed)
         #expect(ssh.calls() == ["exit", "check", "open", "check"])
+    }
+
+    // Review F5: only a network failure counts as an unreachable host, which is the one case
+    // wake recovery retries.
+    @Test(.timeLimit(.minutes(1)), arguments: [
+        "ssh: connect to host petit port 22: Operation timed out",
+        "ssh: connect to host petit port 22: Connection refused",
+        "ssh: connect to host petit port 22: No route to host",
+        "ssh: connect to host petit port 22: Network is unreachable",
+        "ssh: Could not resolve hostname petit: nodename nor servname provided, or not known",
+    ])
+    func aNetworkFailureReportsAnUnreachableHost(stderr: String) async throws {
+        let ssh = try makeFakeSSH(openSucceeds: false, openStderr: stderr)
+        defer { ssh.remove() }
+
+        #expect(await transport(ssh).renewSharedMaster() == .hostUnreachable)
+    }
+
+    // Review F5: a host that needs the user (a password or MFA, a dismissed Touch ID prompt, a
+    // changed host key) or a failure no retry fixes is reported as a failure, never as unreachable.
+    @Test(.timeLimit(.minutes(1)), arguments: [
+        "user@petit: Permission denied (publickey,keyboard-interactive).",
+        "sign_and_send_pubkey: signing failed for ED25519 from agent: agent refused operation\nuser@petit: Permission denied (publickey).",
+        "Host key verification failed.",
+        "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\nWARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!",
+        "kex_exchange_identification: Connection closed by remote host\nConnection closed by UNKNOWN port 65535",
+    ])
+    func aFailureThatNeedsTheUserIsNotReportedAsUnreachable(stderr: String) async throws {
+        let ssh = try makeFakeSSH(openSucceeds: false, openStderr: stderr)
+        defer { ssh.remove() }
+
+        #expect(await transport(ssh).renewSharedMaster() == .failed)
     }
 
     // Review F3: a renewal that starts while another caller's warm-up is in flight, after that
@@ -112,7 +150,7 @@ import Testing
         _ = try await earlier.value
         let renewed = await renewal.value
 
-        #expect(renewed)
+        #expect(renewed == .renewed)
         #expect(FileManager.default.fileExists(atPath: ssh.marker.path))
         #expect(Array(ssh.calls().drop { $0 != "exit" }) == ["exit", "check", "open", "check"])
     }

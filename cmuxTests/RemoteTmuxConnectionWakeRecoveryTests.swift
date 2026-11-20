@@ -29,6 +29,8 @@ import Testing
         case silent
         /// Never reaches control mode.
         case neverEnters
+        /// Answers like `answers` on its first launch; every later launch never reaches control mode.
+        case answersOnceThenNeverEnters
     }
 
     private struct FakeClient {
@@ -71,6 +73,16 @@ import Testing
             body = """
             sleep 60 &
             wait $!
+            """
+        case .answersOnceThenNeverEnters:
+            body = """
+            if [ "$(wc -l < '\(launches.path)')" -gt 1 ]; then sleep 60 & wait $!; exit 0; fi
+            printf '\\033P1000p%%begin 1 1 0\\n%%end 1 1 0\\n'
+            i=2
+            while IFS= read -r line; do
+              printf '%%begin 1 %d 0\\n%%end 1 %d 0\\n' "$i" "$i"
+              i=$((i + 1))
+            done
             """
         }
         try """
@@ -165,6 +177,55 @@ import Testing
 
         connection.resumeReconnectAfterWake()
         #expect(connection.wakeStreamPhase == .retryInFlight)
+        #expect(await connection.waitUntilConnected())
+        #expect(client.launchCount() == 2)
+    }
+
+    // Review F5: a released lead stream reports how its reconnect turned out, so wake recovery
+    // knows whether the others can follow.
+    @Test(.timeLimit(.minutes(1)))
+    func aReleasedStreamReportsThatItConnected() async throws {
+        let client = try makeClient(.answers)
+        defer { client.remove() }
+        let connection = try await connectedAndDrained(client)
+        defer { connection.stop() }
+        #expect(connection.holdReconnectForWake())
+
+        connection.resumeReconnectAfterWake()
+
+        #expect(await connection.waitForReconnectOutcome() == .connected)
+    }
+
+    // Review F5: a stream that ends while its outcome is awaited reports that it ended.
+    @Test(.timeLimit(.minutes(1)))
+    func aStoppedStreamReportsThatItEnded() async throws {
+        let client = try makeClient(.answersOnceThenNeverEnters)
+        defer { client.remove() }
+        let connection = try await connectedAndDrained(client)
+        #expect(connection.holdReconnectForWake())
+        connection.resumeReconnectAfterWake()
+
+        async let outcome = connection.waitForReconnectOutcome()
+        connection.stop()
+
+        #expect(await outcome == .ended)
+    }
+
+    // Review F5: a held stream handed to another stream's login waits for that login, and the
+    // host's login resumes it like any stream that parked by itself.
+    @Test(.timeLimit(.minutes(1)))
+    func aHeldStreamHandedToLoginIsResumedByTheLogin() async throws {
+        let client = try makeClient(.answers)
+        defer { client.remove() }
+        let connection = try await connectedAndDrained(client)
+        defer { connection.stop() }
+        #expect(connection.holdReconnectForWake())
+
+        connection.handOverHeldStreamToLogin()
+        #expect(connection.wakeStreamPhase == .waitingForLogin)
+        #expect(client.launchCount() == 1)
+
+        connection.resumeAfterInteractiveAuth()
         #expect(await connection.waitUntilConnected())
         #expect(client.launchCount() == 2)
     }

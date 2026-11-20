@@ -3245,6 +3245,7 @@
 		1D38480A973B6DDD932968B8 /* RemoteTmuxWakeRecoveryCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A97648D23F5CB02A4C75E2A0 /* RemoteTmuxWakeRecoveryCoordinator.swift */; };
 		6523CE6134338BB851DCA8F9 /* RemoteTmuxWakeRecoveryCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21CE32EB3AF4F4662B7A5BC6 /* RemoteTmuxWakeRecoveryCoordinatorTests.swift */; };
 		CDD5B0FDEEA3A126367F6BE3 /* RemoteTmuxWakeRecoveryEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 008E44C074A5E842F17D4153 /* RemoteTmuxWakeRecoveryEnvironment.swift */; };
+		8740739940D8056E51C5271D /* RemoteTmuxWakeRenewalResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48E94C9A5B02771927E5F23A /* RemoteTmuxWakeRenewalResult.swift */; };
 		2E6F02A07E5D0927EFE8B0BB /* RemoteTmuxWakeStreamPhase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FDE00947D98F1A66723D5C4 /* RemoteTmuxWakeStreamPhase.swift */; };
 		A8C7BE33C1BD3C1AD4342CB1 /* RemoteTmuxWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB52610183419D424AE520B0 /* RemoteTmuxWindow.swift */; };
 		740600000000000000000004 /* RemoteTmuxWindowMirror+Bonsplit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 740600000000000000000003 /* RemoteTmuxWindowMirror+Bonsplit.swift */; };
@@ -7946,6 +7947,7 @@
 		A97648D23F5CB02A4C75E2A0 /* RemoteTmuxWakeRecoveryCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteTmuxWakeRecoveryCoordinator.swift; sourceTree = "<group>"; };
 		21CE32EB3AF4F4662B7A5BC6 /* RemoteTmuxWakeRecoveryCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RemoteTmuxWakeRecoveryCoordinatorTests.swift"; sourceTree = "<group>"; };
 		008E44C074A5E842F17D4153 /* RemoteTmuxWakeRecoveryEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteTmuxWakeRecoveryEnvironment.swift; sourceTree = "<group>"; };
+		48E94C9A5B02771927E5F23A /* RemoteTmuxWakeRenewalResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteTmuxWakeRenewalResult.swift; sourceTree = "<group>"; };
 		4FDE00947D98F1A66723D5C4 /* RemoteTmuxWakeStreamPhase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteTmuxWakeStreamPhase.swift; sourceTree = "<group>"; };
 		AB52610183419D424AE520B0 /* RemoteTmuxWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteTmuxWindow.swift; sourceTree = "<group>"; };
 		740600000000000000000003 /* RemoteTmuxWindowMirror+Bonsplit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RemoteTmuxWindowMirror+Bonsplit.swift"; sourceTree = "<group>"; };
@@ -12741,6 +12743,7 @@
 				A97648D23F5CB02A4C75E2A0 /* RemoteTmuxWakeRecoveryCoordinator.swift */,
 				008E44C074A5E842F17D4153 /* RemoteTmuxWakeRecoveryEnvironment.swift */,
 				4FDE00947D98F1A66723D5C4 /* RemoteTmuxWakeStreamPhase.swift */,
+				48E94C9A5B02771927E5F23A /* RemoteTmuxWakeRenewalResult.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -16933,6 +16936,7 @@
 				C2CDE772AB1611964F16843E /* RemoteTmuxWakeRecovery.swift in Sources */,
 				1D38480A973B6DDD932968B8 /* RemoteTmuxWakeRecoveryCoordinator.swift in Sources */,
 				CDD5B0FDEEA3A126367F6BE3 /* RemoteTmuxWakeRecoveryEnvironment.swift in Sources */,
+				8740739940D8056E51C5271D /* RemoteTmuxWakeRenewalResult.swift in Sources */,
 				2E6F02A07E5D0927EFE8B0BB /* RemoteTmuxWakeStreamPhase.swift in Sources */,
 				A8C7BE33C1BD3C1AD4342CB1 /* RemoteTmuxWindow.swift in Sources */,
 				740600000000000000000004 /* RemoteTmuxWindowMirror+Bonsplit.swift in Sources */,

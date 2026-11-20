@@ -100,7 +100,7 @@ final class RemoteTmuxWakeRecoveryCoordinator {
         // again exactly one master is opened and the user authenticates once. Released streams
         // would each race to create the master (#6732), and each loser would log in on its own.
         var attempt = 0
-        while !(await environment.renewSharedConnection(for: group.host)) {
+        while await environment.renewSharedConnection(for: group.host) != .renewed {
             await environment.waitBeforeRenewalRetry(attempt: attempt)
             attempt += 1
             // The user may close every held mirror while the host is unreachable.

@@ -10,8 +10,8 @@ extension RemoteTmuxSSHTransport {
     /// that every stream then shares. A warm-up another caller started on the old master is never
     /// joined (see ``closeAndReopenMaster()``).
     ///
-    /// - Returns: whether the fresh master was confirmed ready.
-    func renewSharedMaster() async -> Bool {
-        await closeAndReopenMaster()
+    /// - Returns: whether the fresh master was confirmed ready, and if not, why.
+    func renewSharedMaster() async -> RemoteTmuxWakeRenewalResult {
+        await closeAndReopenMaster() ? .renewed : .hostUnreachable
     }
 }
