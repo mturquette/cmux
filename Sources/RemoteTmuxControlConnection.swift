@@ -353,6 +353,9 @@ final class RemoteTmuxControlConnection {
     /// deliberately parked (frozen, not ended) until ``resumeAfterInteractiveAuth()``
     /// or ``stop()``.
     private(set) var awaitingInteractiveAuth = false
+    /// Set while wake recovery holds this stream's retries until the host's shared ssh
+    /// connection has been renewed. No retry is scheduled while this is true.
+    private(set) var reconnectHeldForWake = false
     /// stderr text captured for the in-flight spawn, inspected when a reconnect
     /// attempt's process exits to tell "session genuinely gone" from "host still
     /// unreachable". Reset at the start of each spawn.
@@ -1614,6 +1617,62 @@ final class RemoteTmuxControlConnection {
         awaitingInteractiveAuth = false
         reconnectAttemptCount = 0
         scheduleReconnectAttempt()
+    }
+
+    // MARK: - Wake recovery hooks (see RemoteTmuxWakeRecoveryCoordinator)
+
+    /// Where this stream stands for wake recovery.
+    var wakeStreamPhase: RemoteTmuxWakeStreamPhase {
+        switch connectionState {
+        case .ended: return .ended
+        case .connecting: return .attaching
+        case .connected: return attachBlockDrained ? .connected : .attaching
+        case .reconnecting:
+            if awaitingInteractiveAuth { return .waitingForLogin }
+            if reconnectHeldForWake { return .heldForWake }
+            return process == nil ? .waitingToRetry : .retryInFlight
+        }
+    }
+
+    /// Tears down the stream's process and keeps it reconnecting with nothing scheduled, so wake
+    /// recovery decides when the next attempt runs (after the host's master has been renewed).
+    ///
+    /// The generation bump in `teardownProcessHandles` makes the old process's exit a no-op, and
+    /// nothing else schedules a retry for a stream with no process, so the stream stays held
+    /// until ``resumeReconnectAfterWake()`` or ``stop()``.
+    @discardableResult
+    func holdReconnectForWake() -> Bool {
+        switch wakeStreamPhase {
+        case .connected:
+            beginReconnecting()
+        case .waitingToRetry, .retryInFlight:
+            teardownProcessHandles()
+        case .attaching, .waitingForLogin, .heldForWake, .ended:
+            return false
+        }
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        reconnectHeldForWake = true
+        record("wake-hold")
+        return true
+    }
+
+    /// Releases a held stream with an immediate attempt at the base of the backoff.
+    func resumeReconnectAfterWake() {
+        guard reconnectHeldForWake else { return }
+        reconnectHeldForWake = false
+        record("wake-resume")
+        retryReconnectNow()
+    }
+
+    /// Starts the next reconnect attempt now for a stream waiting between attempts.
+    func retryReconnectNow() {
+        guard wakeStreamPhase == .waitingToRetry else { return }
+        record("retry-now")
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        reconnectAttemptCount = 0
+        attemptReconnectSpawn()
     }
 
     /// Schedules the next reconnect attempt after a capped exponential backoff.

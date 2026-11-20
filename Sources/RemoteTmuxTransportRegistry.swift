@@ -368,6 +368,11 @@ protocol RemoteTmuxTransportProfile: Sendable {
     /// the login existed.
     var authenticationIsSSHShaped: Bool { get }
 
+    /// What this transport's streams do when the Mac wakes from sleep.
+    ///
+    /// Default ``RemoteTmuxWakeRecovery/nothing``, so a transport opts in explicitly.
+    var wakeRecovery: RemoteTmuxWakeRecovery { get }
+
     /// The environment the control-stream process runs with, given the app's own.
     ///
     /// A GUI app's PATH is launchd's `/usr/bin:/bin:/usr/sbin:/sbin`, and the transport's child
@@ -453,6 +458,9 @@ extension RemoteTmuxTransportProfile {
     func controlModeStartTimeoutError(host: RemoteTmuxHost) -> RemoteTmuxError {
         .unreachable(host.destination)
     }
+
+    /// No wake behavior unless a profile declares one.
+    var wakeRecovery: RemoteTmuxWakeRecovery { .nothing }
 }
 
 /// How a transport's control stream gets a terminal.
@@ -833,6 +841,10 @@ struct RemoteTmuxSSHTransportProfile: RemoteTmuxTransportProfile {
 
     /// Killing the ssh client closes tmux's pty, so tmux drops the control client itself.
     var remoteHalfSurvivesLocalExit: Bool { false }
+
+    /// Sleep can kill the shared master's TCP connection while the master process stays up, so
+    /// a retry would ride the dead master and hang. Recovery has to renew the master first.
+    var wakeRecovery: RemoteTmuxWakeRecovery { .checkThenRenewSharedConnection }
 }
 
 /// How cmux gives a transport a controlling terminal.
@@ -1106,6 +1118,10 @@ struct RemoteTmuxETTransportProfile: RemoteTmuxTransportProfile {
     /// would park the connection behind an edge that does not describe it, and with the master
     /// already up that edge fires at once: park, resume, fail, park again, as fast as et can fail.
     var authenticationIsSSHShaped: Bool { false }
+
+    /// et reconnects by itself after sleep or a network change, and tearing it down mid-recovery
+    /// would undo that. Only a stream already waiting between cmux's own attempts is retried now.
+    var wakeRecovery: RemoteTmuxWakeRecovery { .retryWaitingAttemptsNow }
 
     /// et types its command into a canonical-mode pty, so an over-long line is never delivered.
     /// The budget is ``deliverableCommandBytes``, which sits below where delivery was measured to
