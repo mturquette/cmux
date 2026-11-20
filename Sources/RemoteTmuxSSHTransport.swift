@@ -22,8 +22,19 @@ actor RemoteTmuxSSHTransport {
     /// `Sendable` value) when tearing down masters on quit/window-close.
     nonisolated let host: RemoteTmuxHost
 
+    /// How this host's one-shots are carried, and whether it has a shared master at all.
+    ///
+    /// `nonisolated` for the same reason as ``host``: an immutable `Sendable` value.
+    nonisolated let transportProfile: RemoteTmuxTransportProfile
+
+    /// The `ssh` that answers `-O check` and `-O exit` against the shared master.
     private let sshExecutablePath: String
-    private let controlPersistSeconds: Int
+
+    /// The binary that runs one-shot commands with the profile's argv.
+    private let oneShotExecutablePath: String
+
+    /// How long a one-shot may run, from the profile unless a caller overrides it.
+    private let oneShotDeadline: Duration?
 
     /// In-flight shared-master warmup, if any. ``ensureMasterReady()`` funnels every
     /// concurrent caller through this single task so the master is opened at most
@@ -32,16 +43,24 @@ actor RemoteTmuxSSHTransport {
 
     /// - Parameters:
     ///   - host: the remote destination.
-    ///   - sshExecutablePath: the local `ssh` binary (overridable for tests).
-    ///   - controlPersistSeconds: idle lifetime of the shared master.
+    ///   - sshExecutablePath: replaces the `ssh` binary for one-shots and master control
+    ///     (tests inject a fake). `nil` uses the profile's one-shot binary.
+    ///   - transportProfile: overrides the host's profile (tests use it to exercise the seam
+    ///     without a real transport). `nil` uses ``RemoteTmuxHost/transportProfile``.
+    ///   - oneShotDeadline: overrides the profile's ``RemoteTmuxTransportProfile/oneShotDeadline``,
+    ///     so a test can exercise the deadline in milliseconds. `nil` uses the profile's.
     init(
         host: RemoteTmuxHost,
-        sshExecutablePath: String = RemoteTmuxHost.defaultSSHExecutablePath(),
-        controlPersistSeconds: Int = 180
+        sshExecutablePath: String? = nil,
+        transportProfile: RemoteTmuxTransportProfile? = nil,
+        oneShotDeadline: Duration? = nil
     ) {
+        let profile = transportProfile ?? host.transportProfile
         self.host = host
-        self.sshExecutablePath = sshExecutablePath
-        self.controlPersistSeconds = controlPersistSeconds
+        self.transportProfile = profile
+        self.sshExecutablePath = sshExecutablePath ?? RemoteTmuxHost.defaultSSHExecutablePath()
+        self.oneShotExecutablePath = sshExecutablePath ?? profile.oneShotExecutablePath()
+        self.oneShotDeadline = oneShotDeadline ?? profile.oneShotDeadline
     }
 
     // MARK: - High-level tmux operations
@@ -81,16 +100,19 @@ actor RemoteTmuxSSHTransport {
     }
 
     /// Probes the running tmux server version via the server's `#{version}` format.
-    private func tmuxServerVersionProbe() async throws -> (serverExists: Bool, version: RemoteTmuxVersion?) {
+    private func tmuxServerVersionProbe() async throws -> (
+        serverExists: Bool, version: RemoteTmuxVersion?, release: String?
+    ) {
         let result = try await runTmux(["display-message", "-p", "#{version}"])
         guard result.succeeded else {
-            if Self.indicatesNoServer(result.stderr) { return (serverExists: false, version: nil) }
+            if Self.indicatesNoServer(result.stderr) { return (serverExists: false, version: nil, release: nil) }
             throw commandFailure(result)
         }
-        if let version = RemoteTmuxVersion.parseServerFormat(result.stdout) {
-            return (serverExists: true, version: version)
-        }
-        return (serverExists: true, version: nil)
+        return (
+            serverExists: true,
+            version: RemoteTmuxVersion.parseServerFormat(result.stdout),
+            release: RemoteTmuxLocalServerBinary.release(fromServerVersionOutput: result.stdout)
+        )
     }
 
     /// Probes the live-subscription capability directly when server version text
@@ -117,20 +139,90 @@ actor RemoteTmuxSSHTransport {
         if serverProbe.serverExists {
             guard let version = serverProbe.version else {
                 if try await serverSupportsRefreshClientSubscriptions() {
+                    try await assertClientMatchesServer(release: serverProbe.release)
                     return
                 }
                 throw RemoteTmuxError.unsupportedTmux(detected: RemoteTmuxError.unknownVersionDisplayName)
             }
-            try Self.assertSupportedTmuxVersion(version)
+            try assertSupportedTmuxVersion(version)
+            try await assertClientMatchesServer(release: serverProbe.release)
             return
         }
         guard checkClientWhenNoServer else { return }
         if let version = try await tmuxClientVersion() {
-            try Self.assertSupportedTmuxVersion(version)
+            try assertSupportedTmuxVersion(version)
         }
     }
 
-    private static func assertSupportedTmuxVersion(_ version: RemoteTmuxVersion) throws {
+    /// Makes sure the tmux client this transport will run is the build the running server runs,
+    /// for a transport that compares them (``RemoteTmuxTransportProfile/comparesClientRelease``).
+    ///
+    /// Nothing runs for ssh and et. With no server running there is nothing to compare.
+    func assertClientMatchesServer() async throws {
+        guard transportProfile.comparesClientRelease else { return }
+        let serverProbe = try await tmuxServerVersionProbe()
+        guard serverProbe.serverExists else { return }
+        try await assertClientMatchesServer(release: serverProbe.release)
+    }
+
+    /// The client is the server's own binary when running it with `-V` prints the server's release.
+    /// That check, made once per server process, rules out a pid that now names another program
+    /// and a binary rebuilt in place as another release.
+    ///
+    /// Otherwise the client is the resolver's tmux, which must be exactly the server's release:
+    /// tmux 3.2a and 3.6a share protocol version 8, and control mode still fails between them.
+    private func assertClientMatchesServer(release server: String?) async throws {
+        guard transportProfile.comparesClientRelease else { return }
+        if let candidate = transportProfile.serverTmuxCandidate(host: host) {
+            if try await serverBinaryPrintsServerRelease(candidate, server: server) { return }
+        }
+        // The resolver's tmux, which is what the control stream runs without a checked server binary.
+        let resolved = try await runRemoteCommand(RemoteTmuxHost.tmuxResolutionProbeCommand)
+        guard resolved.succeeded else { throw commandFailure(resolved) }
+        let unknown = RemoteTmuxError.unknownVersionDisplayName
+        // Everything below comes from binaries cmux does not trust and may reach the user's
+        // terminal through the CLI, so only a plain path and a release-shaped version are kept.
+        guard let clientPath = RemoteTmuxLocalServerBinary.displayablePath(resolved.stdout) else {
+            throw transportProfile.clientVersionMismatchError(
+                host: host, server: server ?? unknown, client: unknown, clientPath: unknown)
+        }
+        let result = try await runRemoteCommand(Self.execCommand(clientPath, ["-V"]))
+        let client = result.succeeded
+            ? RemoteTmuxLocalServerBinary.release(fromClientVersionOutput: result.stdout) : nil
+        if let server, let client, server == client { return }
+        throw transportProfile.clientVersionMismatchError(
+            host: host, server: server ?? unknown, client: client ?? unknown, clientPath: clientPath)
+    }
+
+    /// Runs `candidate` once with `-V`, unless an earlier attach to the same server process already
+    /// did, and records whether it printed `server`.
+    private func serverBinaryPrintsServerRelease(
+        _ candidate: RemoteTmuxServerBinaryCandidate, server: String?
+    ) async throws -> Bool {
+        if let known = transportProfile.serverTmuxVerification(candidate) { return known }
+        // A file that is not tmux may fail, print anything, or run until the one-shot deadline.
+        // Each of those simply means it is not the server's binary.
+        let output: String?
+        do {
+            let result = try await runRemoteCommand(Self.execCommand(candidate.path, ["-V"]))
+            output = result.succeeded ? result.stdout : nil
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            output = nil
+        }
+        let release = output.flatMap(RemoteTmuxLocalServerBinary.release(fromClientVersionOutput:))
+        let matches = server != nil && release == server
+        transportProfile.recordServerTmuxVerification(candidate, matchesServer: matches)
+        return matches
+    }
+
+    /// `exec '<path>' '<argument>'…`, with every word quoted for the shell.
+    private static func execCommand(_ path: String, _ arguments: [String]) -> String {
+        "exec " + ([path] + arguments).map(RemoteTmuxHost.shellSingleQuoted).joined(separator: " ")
+    }
+
+    private func assertSupportedTmuxVersion(_ version: RemoteTmuxVersion) throws {
         if !version.meetsMinimum {
             throw RemoteTmuxError.unsupportedTmux(detected: version.displayString)
         }
@@ -141,10 +233,21 @@ actor RemoteTmuxSSHTransport {
         try await assertMinimumTmuxVersion(checkClientWhenNoServer: createIfEmpty)
         var sessions = try await listSessions()
         if sessions.isEmpty, createIfEmpty {
+            if let refusal = transportProfile.emptyServerRefusal(host: host) { throw refusal }
+            // Only ssh and et get here: a transport that refuses an empty server returned above.
             _ = try? await runTmux(["new-session", "-d"])
             sessions = try await listSessions()
         }
         return sessions
+    }
+
+    /// The `new-session` arguments for a detached session that cmux's UI creates, printing the
+    /// name tmux gave it. The profile adds where it starts (the home directory for a local server,
+    /// since the app's own working directory means nothing to the user).
+    nonisolated func detachedSessionArguments(name: String, columns: Int, rows: Int) -> [String] {
+        ["new-session", "-d", "-s", name, "-x", "\(columns)", "-y", "\(rows)"]
+            + transportProfile.appCreatedSessionArguments()
+            + ["-P", "-F", "#{session_name}"]
     }
 
     /// Runs a `tmux <args…>` command on the remote host and returns its result.
@@ -153,31 +256,83 @@ actor RemoteTmuxSSHTransport {
         try await run(["tmux"] + args)
     }
 
-    /// Runs an arbitrary remote command over the shared SSH master.
+    /// Runs an arbitrary remote command the way the host's transport profile says.
     ///
-    /// `ssh` concatenates the post-destination argv with spaces and the remote
-    /// login shell re-splits the result, so each remote token is single-quoted
-    /// here; otherwise whitespace inside an argument (e.g. the tabs in a
-    /// `list-sessions -F` format string) would be word-split on the remote.
-    /// A leading literal `tmux` is the `runTmux(_:)` contract and selects the
-    /// remote tmux resolver; other commands are treated as explicit remote argv.
+    /// The remote command is one shell string. `ssh` concatenates the
+    /// post-destination argv with spaces and the remote login shell re-splits
+    /// the result, so each remote token is single-quoted here; otherwise
+    /// whitespace inside an argument (e.g. the tabs in a `list-sessions -F`
+    /// format string) would be word-split on the remote. A leading literal
+    /// `tmux` is the `runTmux(_:)` contract and selects the tmux resolver;
+    /// other commands are treated as explicit remote argv.
+    ///
+    /// The profile supplies the executable and argv
+    /// (``RemoteTmuxTransportProfile/oneShotArgv(host:remoteCommand:)``), so the
+    /// transport never builds an ssh command line itself.
     @discardableResult
     func run(_ remoteArgs: [String]) async throws -> RemoteTmuxCommandResult {
-        try host.ensureControlSocketDirectory()
+        // Before the command is built: building it may look at the server behind the socket.
+        if let refusal = transportProfile.refusalBeforeSpawn(host: host) { throw refusal }
         let remoteCommand: String
         if remoteArgs.first == "tmux" {
-            remoteCommand = RemoteTmuxHost.tmuxRemoteCommand(arguments: Array(remoteArgs.dropFirst()))
+            remoteCommand = transportProfile.tmuxOneShotCommand(host: host, arguments: Array(remoteArgs.dropFirst()))
         } else {
             remoteCommand = remoteArgs
                 .map { RemoteTmuxHost.shellSingleQuoted($0) }
                 .joined(separator: " ")
         }
-        // `--` ends ssh option parsing so a destination beginning with `-`
-        // (e.g. `-oProxyCommand=…`) can never be consumed as an ssh option.
-        let sshArgs =
-            host.sshControlArguments(controlPersistSeconds: controlPersistSeconds, batchMode: true)
-            + ["--", host.destination, remoteCommand]
-        return try await Self.runProcess(executable: sshExecutablePath, arguments: sshArgs)
+        return try await runRemoteCommand(remoteCommand, socketChecked: true)
+    }
+
+    /// Runs one already-built remote command string the way the host's transport profile says.
+    private func runRemoteCommand(
+        _ remoteCommand: String, socketChecked: Bool = false
+    ) async throws -> RemoteTmuxCommandResult {
+        if !socketChecked, let refusal = transportProfile.refusalBeforeSpawn(host: host) { throw refusal }
+        if transportProfile.usesSharedControlMaster {
+            try host.ensureControlSocketDirectory()
+        }
+        let executable = oneShotExecutablePath
+        let arguments = transportProfile.oneShotArgv(host: host, remoteCommand: remoteCommand)
+        let environment = transportProfile.oneShotEnvironment(inheriting: ProcessInfo.processInfo.environment)
+        guard let deadline = oneShotDeadline else {
+            return try await Self.runProcess(executable: executable, arguments: arguments, environment: environment)
+        }
+        return try await Self.runOneShotBeforeDeadline(
+            executable: executable,
+            arguments: arguments,
+            environment: environment,
+            deadline: deadline,
+            timeoutError: transportProfile.oneShotTimeoutError(host: host)
+        )
+    }
+
+    /// Runs a one-shot that must finish before `deadline`.
+    ///
+    /// A deadline, not a poll: the command and a single sleep race, the first to finish wins, and
+    /// cancelling the loser stops the process through `runProcess`'s cancellation handler. It
+    /// exists for transports with no timeout of their own: ssh has `ConnectTimeout` and
+    /// `ServerAlive*`, while a local tmux client facing a stopped server waits forever, and
+    /// the app would keep one such process per call.
+    private static func runOneShotBeforeDeadline(
+        executable: String,
+        arguments: [String],
+        environment: [String: String]?,
+        deadline: Duration,
+        timeoutError: RemoteTmuxError
+    ) async throws -> RemoteTmuxCommandResult {
+        try await withThrowingTaskGroup(of: RemoteTmuxCommandResult?.self) { group in
+            group.addTask {
+                try await Self.runProcess(executable: executable, arguments: arguments, environment: environment)
+            }
+            group.addTask {
+                try await ContinuousClock().sleep(for: deadline)
+                return nil
+            }
+            defer { group.cancelAll() }
+            guard let first = try await group.next(), let result = first else { throw timeoutError }
+            return result
+        }
     }
 
     /// Opens the shared SSH ControlMaster (if it isn't already up) and confirms it
@@ -214,8 +369,12 @@ actor RemoteTmuxSSHTransport {
     /// rather than tearing it down for the others. Callers that must bail re-check
     /// `Task.checkCancellation()` after this — as the controller does before
     /// creating the dedicated window.
+    ///
+    /// A transport whose profile has no shared master is always ready: there is
+    /// nothing to warm, and no socket whose absence would mean "not yet".
     @discardableResult
     func ensureMasterReady() async throws -> Bool {
+        guard transportProfile.usesSharedControlMaster else { return true }
         if let existing = readinessTask {
             return try await existing.value
         }
@@ -266,12 +425,18 @@ actor RemoteTmuxSSHTransport {
     /// probe for "has the user finished authenticating in the login terminal yet?" —
     /// unlike ``ensureMasterReady()``, which would attempt a `BatchMode` open and
     /// burn a failed authentication attempt while the user is still typing.
+    ///
+    /// A transport with no shared master reports live, matching
+    /// ``ensureMasterReady()``: nothing is pending on a socket.
     func isMasterLive() async -> Bool {
-        (try? await masterIsRunning()) ?? false
+        guard transportProfile.usesSharedControlMaster else { return true }
+        return (try? await masterIsRunning()) ?? false
     }
 
     /// Tears down the shared SSH master (e.g. when the user removes a host).
+    /// Does nothing for a transport with no shared master.
     func shutdownMaster() async {
+        guard transportProfile.usesSharedControlMaster else { return }
         _ = try? await Self.runProcess(
             executable: sshExecutablePath,
             arguments: ["-O", "exit", "-o", "ControlPath=\(host.controlSocketPath)", "--", host.destination]
@@ -286,10 +451,12 @@ actor RemoteTmuxSSHTransport {
     /// runs independently of cmux, so the master is torn down even as the app exits
     /// — instead of lingering for `ControlPersist` after the user closes the app or
     /// the mirror window. Best-effort: a missing/dead socket just fails fast.
+    /// Spawns nothing for a host whose transport has no shared master.
     nonisolated static func spawnControlMasterExit(
         host: RemoteTmuxHost,
         sshExecutablePath: String = RemoteTmuxHost.defaultSSHExecutablePath()
     ) {
+        guard host.transportProfile.usesSharedControlMaster else { return }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: sshExecutablePath)
         process.arguments = ["-O", "exit", "-o", "ControlPath=\(host.controlSocketPath)", "--", host.destination]
@@ -460,13 +627,19 @@ actor RemoteTmuxSSHTransport {
     /// We capture only the raw fds (`Int32`, `Sendable`) across the task
     /// boundary — never the non-`Sendable` `FileHandle` — and the `Pipe`s stay
     /// alive because `process` retains them until this function returns.
+    ///
+    /// `environment` nil inherits the app's environment, as ssh's master commands do.
     private static func runProcess(
         executable: String,
-        arguments: [String]
+        arguments: [String],
+        environment: [String: String]? = nil
     ) async throws -> RemoteTmuxCommandResult {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
+        if let environment {
+            process.environment = environment
+        }
 
         let outPipe = Pipe()
         let errPipe = Pipe()

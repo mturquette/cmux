@@ -393,6 +393,9 @@ extension RemoteTmuxController {
         live?.connection?.record(
             "mirror-failure awaiting=\(awaited) hasView=\(live != nil) "
                 + "hasConn=\(live?.connection != nil)")
+        if !awaited, let startFailure = live?.connection?.startFailure ?? live?.lastStartFailure {
+            return startFailure
+        }
         return RemoteTmuxController.mirrorFailure(
             destination: host.destination,
             awaitingCredentials: awaited,

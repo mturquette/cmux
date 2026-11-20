@@ -194,6 +194,7 @@ struct CmuxCommand: AsyncParsableCommand {
             MoshCommand.self,
             MoshTmuxCommand.self,
             SSHTmuxCommand.self,
+            TmuxMirrorCommand.self,
             LocalTmuxCommand.self,
             TmuxAliasCommand.self,
             LocalZellijCommand.self,

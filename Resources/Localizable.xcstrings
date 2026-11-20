@@ -84772,55 +84772,55 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Usage: cmux local-tmux <start|attach|list|status|detach|close|cleanup> [session] [options]\n\nOpt-in local tmux sessions survive cmux quit, crash, and app updates. Ordinary cmux terminals are unchanged.\n\nstart <name> [--cwd <path>] [--command <shell>] [--detached]\nattach <name|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <name|--id <uuid>> [--json]\ndetach <name|--id <uuid>> [--client <id> | --all]\nclose <name|--id <uuid>>\ncleanup [--prune]\n\nThe registry and tmux server socket live under ~/.cmux/local-tmux with user-only permissions. `attach --headless` hands the terminal directly to tmux for a client outside the cmux GUI."
+            "value": "Usage: cmux local-tmux <start|attach|list|status|detach|close|cleanup> [session] [options]\n\nTo show an existing tmux server's sessions as workspaces, use cmux tmux-mirror.\nOpt-in local tmux sessions survive cmux quit, crash, and app updates. Ordinary cmux terminals are unchanged.\n\nstart <name> [--cwd <path>] [--command <shell>] [--detached]\nattach <name|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <name|--id <uuid>> [--json]\ndetach <name|--id <uuid>> [--client <id> | --all]\nclose <name|--id <uuid>>\ncleanup [--prune]\n\nThe registry and tmux server socket live under ~/.cmux/local-tmux with user-only permissions. `attach --headless` hands the terminal directly to tmux for a client outside the cmux GUI."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "使い方: cmux local-tmux <start|attach|list|status|detach|close|cleanup> [セッション] [オプション]\n\nオプトインしたローカル tmux セッションは cmux の終了、クラッシュ、アップデート後も維持されます。通常の cmux ターミナルの動作は変わりません。\n\nstart <name> [--cwd <path>] [--command <shell>] [--detached]\nattach <name|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <name|--id <uuid>> [--json]\ndetach <name|--id <uuid>> [--client <id> | --all]\nclose <name|--id <uuid>>\ncleanup [--prune]\n\nレジストリと tmux サーバーソケットは ~/.cmux/local-tmux にユーザー専用権限で保存されます。`attach --headless` は cmux GUI 外のクライアントを tmux に直接接続します。"
+            "value": "使い方: cmux local-tmux <start|attach|list|status|detach|close|cleanup> [セッション] [オプション]\n\n既存の tmux サーバーのセッションをワークスペースとして表示するには cmux tmux-mirror を使ってください。\nオプトインしたローカル tmux セッションは cmux の終了、クラッシュ、アップデート後も維持されます。通常の cmux ターミナルの動作は変わりません。\n\nstart <name> [--cwd <path>] [--command <shell>] [--detached]\nattach <name|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <name|--id <uuid>> [--json]\ndetach <name|--id <uuid>> [--client <id> | --all]\nclose <name|--id <uuid>>\ncleanup [--prune]\n\nレジストリと tmux サーバーソケットは ~/.cmux/local-tmux にユーザー専用権限で保存されます。`attach --headless` は cmux GUI 外のクライアントを tmux に直接接続します。"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Verwendung: cmux local-tmux <start|attach|list|status|detach|close|cleanup> [Sitzung] [Optionen]\n\nOpt-in lokale tmux-Sitzungen überstehen das Beenden von cmux, Abstürze und App-Updates. Normale cmux-Terminals bleiben unverändert.\n\nstart <Name> [--cwd <Pfad>] [--command <Shell>] [--detached]\nattach <Name|--id <UUID>> [--workspace <ID|Ref|Index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <Name|--id <UUID>> [--json]\ndetach <Name|--id <UUID>> [--client <ID> | --all]\nclose <Name|--id <UUID>>\ncleanup [--prune]\n\nDie Registrierung und der tmux-Server-Socket befinden sich unter ~/.cmux/local-tmux mit Berechtigungen nur für den Benutzer. `attach --headless` übergibt das Terminal direkt an tmux für einen Client außerhalb der cmux-GUI."
+            "value": "Verwendung: cmux local-tmux <start|attach|list|status|detach|close|cleanup> [Sitzung] [Optionen]\n\nUm die Sitzungen eines vorhandenen tmux-Servers als Workspaces anzuzeigen, verwende cmux tmux-mirror.\nOpt-in lokale tmux-Sitzungen überstehen das Beenden von cmux, Abstürze und App-Updates. Normale cmux-Terminals bleiben unverändert.\n\nstart <Name> [--cwd <Pfad>] [--command <Shell>] [--detached]\nattach <Name|--id <UUID>> [--workspace <ID|Ref|Index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <Name|--id <UUID>> [--json]\ndetach <Name|--id <UUID>> [--client <ID> | --all]\nclose <Name|--id <UUID>>\ncleanup [--prune]\n\nDie Registrierung und der tmux-Server-Socket befinden sich unter ~/.cmux/local-tmux mit Berechtigungen nur für den Benutzer. `attach --headless` übergibt das Terminal direkt an tmux für einen Client außerhalb der cmux-GUI."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Utilisation : cmux local-tmux <start|attach|list|status|detach|close|cleanup> [session] [options]\n\nLes sessions tmux locales optionnelles survivent à l'arrêt, au plantage et aux mises à jour de cmux. Les terminaux ordinaires de cmux restent inchangés.\n\nstart <nom> [--cwd <chemin>] [--command <shell>] [--detached]\nattach <nom|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <nom|--id <uuid>> [--json]\ndetach <nom|--id <uuid>> [--client <id> | --all]\nclose <nom|--id <uuid>>\ncleanup [--prune]\n\nLe registre et le socket du serveur tmux résident sous ~/.cmux/local-tmux avec des permissions réservées à l'utilisateur. `attach --headless` transmet le terminal directement à tmux pour un client extérieur à l'interface graphique de cmux."
+            "value": "Utilisation : cmux local-tmux <start|attach|list|status|detach|close|cleanup> [session] [options]\n\nPour afficher les sessions d’un serveur tmux existant comme espaces de travail, utilisez cmux tmux-mirror.\nLes sessions tmux locales optionnelles survivent à l'arrêt, au plantage et aux mises à jour de cmux. Les terminaux ordinaires de cmux restent inchangés.\n\nstart <nom> [--cwd <chemin>] [--command <shell>] [--detached]\nattach <nom|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <nom|--id <uuid>> [--json]\ndetach <nom|--id <uuid>> [--client <id> | --all]\nclose <nom|--id <uuid>>\ncleanup [--prune]\n\nLe registre et le socket du serveur tmux résident sous ~/.cmux/local-tmux avec des permissions réservées à l'utilisateur. `attach --headless` transmet le terminal directement à tmux pour un client extérieur à l'interface graphique de cmux."
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "الاستخدام: cmux local-tmux <start|attach|list|status|detach|close|cleanup> [session] [options]\n\nجلسات tmux المحلية الاختيارية تظل نشطة بعد إنهاء cmux، والانهيار، وتحديثات التطبيق. لا تتغير طرفيات cmux العادية.\n\nstart <name> [--cwd <path>] [--command <shell>] [--detached]\nattach <name|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <name|--id <uuid>> [--json]\ndetach <name|--id <uuid>> [--client <id> | --all]\nclose <name|--id <uuid>>\ncleanup [--prune]\n\nيعيش السجل ومقبس خادم tmux تحت ~/.cmux/local-tmux بصلاحيات للمستخدم فقط. يسلّم `attach --headless` الطرفية مباشرة إلى tmux لعميل خارج واجهة cmux الرسومية."
+            "value": "الاستخدام: cmux local-tmux <start|attach|list|status|detach|close|cleanup> [session] [options]\n\nلعرض جلسات خادم tmux موجود كمساحات عمل، استخدم cmux tmux-mirror.\nجلسات tmux المحلية الاختيارية تظل نشطة بعد إنهاء cmux، والانهيار، وتحديثات التطبيق. لا تتغير طرفيات cmux العادية.\n\nstart <name> [--cwd <path>] [--command <shell>] [--detached]\nattach <name|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <name|--id <uuid>> [--json]\ndetach <name|--id <uuid>> [--client <id> | --all]\nclose <name|--id <uuid>>\ncleanup [--prune]\n\nيعيش السجل ومقبس خادم tmux تحت ~/.cmux/local-tmux بصلاحيات للمستخدم فقط. يسلّم `attach --headless` الطرفية مباشرة إلى tmux لعميل خارج واجهة cmux الرسومية."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Uso: cmux local-tmux <start|attach|list|status|detach|close|cleanup> [session] [options]\n\nLas sesiones locales de tmux opcionales sobreviven a cierres, fallos y actualizaciones de la aplicación cmux. Las terminales ordinarias de cmux no cambian.\n\nstart <name> [--cwd <path>] [--command <shell>] [--detached]\nattach <name|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <name|--id <uuid>> [--json]\ndetach <name|--id <uuid>> [--client <id> | --all]\nclose <name|--id <uuid>>\ncleanup [--prune]\n\nEl registro y el socket del servidor de tmux residen en ~/.cmux/local-tmux con permisos exclusivos del usuario. `attach --headless` entrega la terminal directamente a tmux para un cliente fuera de la interfaz gráfica de cmux."
+            "value": "Uso: cmux local-tmux <start|attach|list|status|detach|close|cleanup> [session] [options]\n\nPara mostrar las sesiones de un servidor tmux existente como espacios de trabajo, usa cmux tmux-mirror.\nLas sesiones locales de tmux opcionales sobreviven a cierres, fallos y actualizaciones de la aplicación cmux. Las terminales ordinarias de cmux no cambian.\n\nstart <name> [--cwd <path>] [--command <shell>] [--detached]\nattach <name|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <name|--id <uuid>> [--json]\ndetach <name|--id <uuid>> [--client <id> | --all]\nclose <name|--id <uuid>>\ncleanup [--prune]\n\nEl registro y el socket del servidor de tmux residen en ~/.cmux/local-tmux con permisos exclusivos del usuario. `attach --headless` entrega la terminal directamente a tmux para un cliente fuera de la interfaz gráfica de cmux."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "用法：cmux local-tmux <start|attach|list|status|detach|close|cleanup> [session] [options]\n\n選擇加入的本機 tmux 工作階段在 cmux 結束、當機和軟體更新後仍能保留。一般的 cmux 終端機則不受影響。\n\nstart <name> [--cwd <path>] [--command <shell>] [--detached]\nattach <name|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <name|--id <uuid>> [--json]\ndetach <name|--id <uuid>> [--client <id> | --all]\nclose <name|--id <uuid>>\ncleanup [--prune]\n\n註冊表與 tmux 伺服器 socket 位於 ~/.cmux/local-tmux 下，並具有僅限使用者存取的權限。`attach --headless` 會將終端機直接交給 tmux，以在 cmux GUI 之外使用用戶端。`"
+            "value": "用法：cmux local-tmux <start|attach|list|status|detach|close|cleanup> [session] [options]\n\n若要將既有 tmux 伺服器的工作階段顯示為工作區，請使用 cmux tmux-mirror。\n選擇加入的本機 tmux 工作階段在 cmux 結束、當機和軟體更新後仍能保留。一般的 cmux 終端機則不受影響。\n\nstart <name> [--cwd <path>] [--command <shell>] [--detached]\nattach <name|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <name|--id <uuid>> [--json]\ndetach <name|--id <uuid>> [--client <id> | --all]\nclose <name|--id <uuid>>\ncleanup [--prune]\n\n註冊表與 tmux 伺服器 socket 位於 ~/.cmux/local-tmux 下，並具有僅限使用者存取的權限。`attach --headless` 會將終端機直接交給 tmux，以在 cmux GUI 之外使用用戶端。`"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "用法: cmux local-tmux <start|attach|list|status|detach|close|cleanup> [session] [options]\n\n选择加入的本地 tmux 会话在 cmux 退出、崩溃和应用更新时仍能存活。普通的 cmux 终端不受影响。\n\nstart <name> [--cwd <path>] [--command <shell>] [--detached]\nattach <name|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <name|--id <uuid>> [--json]\ndetach <name|--id <uuid>> [--client <id> | --all]\nclose <name|--id <uuid>>\ncleanup [--prune]\n\n注册表和 tmux 服务器套接字位于具有仅用户权限的 ~/.cmux/local-tmux 下。`attach --headless` 会将终端直接移交给 tmux，以便在 cmux GUI 之外运行客户端。"
+            "value": "用法: cmux local-tmux <start|attach|list|status|detach|close|cleanup> [session] [options]\n\n若要将已有 tmux 服务器的会话显示为工作区，请使用 cmux tmux-mirror。\n选择加入的本地 tmux 会话在 cmux 退出、崩溃和应用更新时仍能存活。普通的 cmux 终端不受影响。\n\nstart <name> [--cwd <path>] [--command <shell>] [--detached]\nattach <name|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <name|--id <uuid>> [--json]\ndetach <name|--id <uuid>> [--client <id> | --all]\nclose <name|--id <uuid>>\ncleanup [--prune]\n\n注册表和 tmux 服务器套接字位于具有仅用户权限的 ~/.cmux/local-tmux 下。`attach --headless` 会将终端直接移交给 tmux，以便在 cmux GUI 之外运行客户端。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "사용법: cmux local-tmux <start|attach|list|status|detach|close|cleanup> [session] [options]\n\n선택하여 사용하는 로컬 tmux 세션은 cmux 종료, 충돌 및 앱 업데이트 후에도 유지됩니다. 일반 cmux 터미널은 변경되지 않습니다.\n\nstart <name> [--cwd <path>] [--command <shell>] [--detached]\nattach <name|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <name|--id <uuid>> [--json]\ndetach <name|--id <uuid>> [--client <id> | --all]\nclose <name|--id <uuid>>\ncleanup [--prune]\n\n레지스트리 및 tmux 서버 소켓은 사용자 전용 권한으로 ~/.cmux/local-tmux 아래에 저장됩니다. `attach --headless`는 cmux GUI 외부의 클라이언트를 위해 터미널을 tmux에 직접 전달합니다."
+            "value": "사용법: cmux local-tmux <start|attach|list|status|detach|close|cleanup> [session] [options]\n\n기존 tmux 서버의 세션을 워크스페이스로 표시하려면 cmux tmux-mirror를 사용하세요.\n선택하여 사용하는 로컬 tmux 세션은 cmux 종료, 충돌 및 앱 업데이트 후에도 유지됩니다. 일반 cmux 터미널은 변경되지 않습니다.\n\nstart <name> [--cwd <path>] [--command <shell>] [--detached]\nattach <name|--id <uuid>> [--workspace <id|ref|index>] [--focus <true|false>] [--headless] [--new-client]\nlist [--json]\nstatus <name|--id <uuid>> [--json]\ndetach <name|--id <uuid>> [--client <id> | --all]\nclose <name|--id <uuid>>\ncleanup [--prune]\n\n레지스트리 및 tmux 서버 소켓은 사용자 전용 권한으로 ~/.cmux/local-tmux 아래에 저장됩니다. `attach --headless`는 cmux GUI 외부의 클라이언트를 위해 터미널을 tmux에 직접 전달합니다."
           }
         }
       }
@@ -645020,6 +645020,608 @@
         }
       }
     },
+    "cli.tmuxMirror.help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Usage: cmux tmux-mirror [--socket-name <name> | --socket-path <path>] [--new-window] [--name <title>] [--focus | --no-focus]\n       cmux tmux-mirror list [--socket-name <name> | --socket-path <path>]\n       cmux tmux-mirror attach <session> [options]\n\nMirror an existing tmux server on this Mac without SSH (cmux local-tmux runs a private, persistent server).\nEach session becomes a workspace, each window a tab, and each multi-pane window a native split.\n\nBy default it mirrors the server `tmux ls` would show in this shell: the current pane's\nserver inside tmux, otherwise the one chosen by TMUX_TMPDIR. When no server is running, it starts one with a session in the current directory.\n\nFlags:\n  --socket-name <name>  The server tmux -L <name> would use\n  --socket-path <path>  The server tmux -S <path> would use\n  --new-window          Open the mirror in a new window\n  --name <title>        Workspace title\n  --focus, --no-focus   Override the default focus behavior" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "الاستخدام: cmux tmux-mirror [--socket-name <name> | --socket-path <path>] [--new-window] [--name <title>] [--focus | --no-focus]\n       cmux tmux-mirror list [--socket-name <name> | --socket-path <path>]\n       cmux tmux-mirror attach <session> [options]\n\nيعكس خادم tmux موجودًا على جهاز Mac هذا دون SSH (يشغّل cmux local-tmux بدلًا من ذلك خادمًا خاصًا ودائمًا).\nتصبح كل جلسة مساحة عمل، وكل نافذة علامة تبويب، وكل نافذة متعددة الأجزاء تقسيمًا أصليًا.\n\nافتراضيًا يعكس الخادم الذي سيعرضه `tmux ls` في هذه الصدفة: داخل tmux خادم الجزء الحالي،\nوإلا فالخادم الذي يحدده TMUX_TMPDIR. إذا لم يكن هناك خادم قيد التشغيل، يبدأ واحدًا بجلسة في الدليل الحالي.\n\nالخيارات:\n  --socket-name <name>  الخادم الذي سيستخدمه tmux -L <name>\n  --socket-path <path>  الخادم الذي سيستخدمه tmux -S <path>\n  --new-window          فتح الانعكاس في نافذة جديدة\n  --name <title>        عنوان مساحة العمل\n  --focus, --no-focus   تجاوز سلوك التركيز الافتراضي" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Verwendung: cmux tmux-mirror [--socket-name <name> | --socket-path <path>] [--new-window] [--name <title>] [--focus | --no-focus]\n       cmux tmux-mirror list [--socket-name <name> | --socket-path <path>]\n       cmux tmux-mirror attach <session> [options]\n\nSpiegelt einen vorhandenen tmux-Server auf diesem Mac ohne SSH (cmux local-tmux betreibt stattdessen einen privaten, dauerhaften Server).\nJede Sitzung wird zu einem Workspace, jedes Fenster zu einem Tab und jedes Fenster mit mehreren Bereichen zu einer nativen Teilung.\n\nStandardmäßig wird der Server gespiegelt, den `tmux ls` in dieser Shell zeigen würde: innerhalb von tmux der Server des aktuellen Bereichs,\nsonst der durch TMUX_TMPDIR gewählte. Läuft kein Server, wird einer mit einer Sitzung im aktuellen Verzeichnis gestartet.\n\nOptionen:\n  --socket-name <name>  Der Server, den tmux -L <name> verwenden würde\n  --socket-path <path>  Der Server, den tmux -S <path> verwenden würde\n  --new-window          Spiegel in einem neuen Fenster öffnen\n  --name <title>        Titel des Workspace\n  --focus, --no-focus   Standardverhalten für den Fokus überschreiben" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Uso: cmux tmux-mirror [--socket-name <name> | --socket-path <path>] [--new-window] [--name <title>] [--focus | --no-focus]\n       cmux tmux-mirror list [--socket-name <name> | --socket-path <path>]\n       cmux tmux-mirror attach <session> [options]\n\nRefleja un servidor tmux existente en este Mac sin SSH (cmux local-tmux ejecuta en su lugar un servidor privado y persistente).\nCada sesión se convierte en un espacio de trabajo, cada ventana en una pestaña y cada ventana con varios paneles en una división nativa.\n\nDe forma predeterminada refleja el servidor que `tmux ls` mostraría en esta shell: dentro de tmux, el del panel actual;\nsi no, el que elige TMUX_TMPDIR. Si no hay ningún servidor en ejecución, inicia uno con una sesión en el directorio actual.\n\nOpciones:\n  --socket-name <name>  El servidor que usaría tmux -L <name>\n  --socket-path <path>  El servidor que usaría tmux -S <path>\n  --new-window          Abrir el reflejo en una ventana nueva\n  --name <title>        Título del espacio de trabajo\n  --focus, --no-focus   Cambiar el comportamiento de foco predeterminado" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Utilisation : cmux tmux-mirror [--socket-name <name> | --socket-path <path>] [--new-window] [--name <title>] [--focus | --no-focus]\n       cmux tmux-mirror list [--socket-name <name> | --socket-path <path>]\n       cmux tmux-mirror attach <session> [options]\n\nReflète un serveur tmux existant sur ce Mac sans SSH (cmux local-tmux exécute plutôt un serveur privé et persistant).\nChaque session devient un espace de travail, chaque fenêtre un onglet, et chaque fenêtre à plusieurs volets une division native.\n\nPar défaut, reflète le serveur que `tmux ls` afficherait dans ce shell : celui du volet courant dans tmux,\nsinon celui choisi par TMUX_TMPDIR. Si aucun serveur ne tourne, en démarre un avec une session dans le répertoire courant.\n\nOptions :\n  --socket-name <name>  Le serveur qu’utiliserait tmux -L <name>\n  --socket-path <path>  Le serveur qu’utiliserait tmux -S <path>\n  --new-window          Ouvrir le miroir dans une nouvelle fenêtre\n  --name <title>        Titre de l’espace de travail\n  --focus, --no-focus   Remplacer le comportement de focus par défaut" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "使い方: cmux tmux-mirror [--socket-name <name> | --socket-path <path>] [--new-window] [--name <title>] [--focus | --no-focus]\n       cmux tmux-mirror list [--socket-name <name> | --socket-path <path>]\n       cmux tmux-mirror attach <session> [options]\n\nこの Mac 上の既存の tmux サーバーを SSH なしでミラーします（cmux local-tmux は代わりに専用の永続サーバーを実行します）。\n各セッションはワークスペースに、各ウィンドウはタブに、複数ペインのウィンドウはネイティブ分割になります。\n\n既定では、このシェルで `tmux ls` が表示するサーバーをミラーします。tmux 内では現在のペインのサーバー、\nそれ以外では TMUX_TMPDIR で決まるサーバーです。サーバーが動いていない場合は、現在のディレクトリでセッションを作って起動します。\n\nフラグ:\n  --socket-name <name>  tmux -L <name> が使うサーバー\n  --socket-path <path>  tmux -S <path> が使うサーバー\n  --new-window          新しいウィンドウでミラーを開く\n  --name <title>        ワークスペースのタイトル\n  --focus, --no-focus   既定のフォーカス動作を上書きする" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "사용법: cmux tmux-mirror [--socket-name <name> | --socket-path <path>] [--new-window] [--name <title>] [--focus | --no-focus]\n       cmux tmux-mirror list [--socket-name <name> | --socket-path <path>]\n       cmux tmux-mirror attach <session> [options]\n\n이 Mac의 기존 tmux 서버를 SSH 없이 미러링합니다(cmux local-tmux는 대신 전용 영구 서버를 실행합니다).\n각 세션은 워크스페이스, 각 창은 탭, 여러 패널이 있는 창은 네이티브 분할이 됩니다.\n\n기본적으로 이 셸에서 `tmux ls`가 보여 줄 서버를 미러링합니다. tmux 안에서는 현재 패널의 서버,\n그 밖에서는 TMUX_TMPDIR가 정하는 서버입니다. 실행 중인 서버가 없으면 현재 디렉터리에 세션을 만들어 서버를 시작합니다.\n\n플래그:\n  --socket-name <name>  tmux -L <name>이 사용할 서버\n  --socket-path <path>  tmux -S <path>가 사용할 서버\n  --new-window          새 창에서 미러 열기\n  --name <title>        워크스페이스 제목\n  --focus, --no-focus   기본 포커스 동작 재정의" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "用法：cmux tmux-mirror [--socket-name <name> | --socket-path <path>] [--new-window] [--name <title>] [--focus | --no-focus]\n       cmux tmux-mirror list [--socket-name <name> | --socket-path <path>]\n       cmux tmux-mirror attach <session> [options]\n\n无需 SSH 即可镜像此 Mac 上已有的 tmux 服务器（cmux local-tmux 则运行一个私有的持久服务器）。\n每个会话成为一个工作区，每个窗口成为一个标签页，每个多窗格窗口成为原生分屏。\n\n默认镜像在此 shell 中 `tmux ls` 会显示的服务器：在 tmux 内为当前窗格所属的服务器，\n否则为 TMUX_TMPDIR 选定的服务器。若没有服务器在运行，则在当前目录创建会话并启动一个。\n\n选项：\n  --socket-name <name>  tmux -L <name> 会使用的服务器\n  --socket-path <path>  tmux -S <path> 会使用的服务器\n  --new-window          在新窗口中打开镜像\n  --name <title>        工作区标题\n  --focus, --no-focus   覆盖默认的聚焦行为" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "用法：cmux tmux-mirror [--socket-name <name> | --socket-path <path>] [--new-window] [--name <title>] [--focus | --no-focus]\n       cmux tmux-mirror list [--socket-name <name> | --socket-path <path>]\n       cmux tmux-mirror attach <session> [options]\n\n不需 SSH 即可鏡像此 Mac 上既有的 tmux 伺服器（cmux local-tmux 則執行一個私有的持久伺服器）。\n每個工作階段成為一個工作區，每個視窗成為一個分頁，每個多窗格視窗成為原生分割。\n\n預設鏡像在此 shell 中 `tmux ls` 會顯示的伺服器：在 tmux 內為目前窗格所屬的伺服器，\n否則為 TMUX_TMPDIR 選定的伺服器。若沒有伺服器在執行，則在目前目錄建立工作階段並啟動一個。\n\n選項：\n  --socket-name <name>  tmux -L <name> 會使用的伺服器\n  --socket-path <path>  tmux -S <path> 會使用的伺服器\n  --new-window          在新視窗中開啟鏡像\n  --name <title>        工作區標題\n  --focus, --no-focus   覆寫預設的聚焦行為" } }
+      }
+    },
+    "cli.tmuxMirror.error.socketNameInvalid": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "tmux-mirror: --socket-name must be a plain name, without / or control characters" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "tmux-mirror: يجب أن يكون --socket-name اسمًا بسيطًا دون / أو أحرف تحكم" } },
+        "de": { "stringUnit": { "state": "translated", "value": "tmux-mirror: --socket-name muss ein einfacher Name ohne / oder Steuerzeichen sein" } },
+        "es": { "stringUnit": { "state": "translated", "value": "tmux-mirror: --socket-name debe ser un nombre simple, sin / ni caracteres de control" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "tmux-mirror : --socket-name doit être un nom simple, sans / ni caractère de contrôle" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "tmux-mirror: --socket-name には / や制御文字を含まない単純な名前を指定してください" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "tmux-mirror: --socket-name은 / 또는 제어 문자가 없는 단순한 이름이어야 합니다" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "tmux-mirror：--socket-name 必须是不含 / 或控制字符的简单名称" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "tmux-mirror：--socket-name 必須是不含 / 或控制字元的簡單名稱" } }
+      }
+    },
+    "cli.tmuxMirror.startDirectory.gone": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "tmux-mirror: the current directory no longer exists; the new session starts in %@" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "tmux-mirror: لم يعد الدليل الحالي موجودًا؛ ستبدأ الجلسة الجديدة في %@" } },
+        "de": { "stringUnit": { "state": "translated", "value": "tmux-mirror: Das aktuelle Verzeichnis existiert nicht mehr; die neue Sitzung startet in %@" } },
+        "es": { "stringUnit": { "state": "translated", "value": "tmux-mirror: el directorio actual ya no existe; la nueva sesión empieza en %@" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "tmux-mirror : le répertoire courant n’existe plus ; la nouvelle session démarre dans %@" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "tmux-mirror: 現在のディレクトリはもう存在しません。新しいセッションは %@ で開始します" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "tmux-mirror: 현재 디렉터리가 더 이상 없습니다. 새 세션은 %@에서 시작합니다" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "tmux-mirror：当前目录已不存在；新会话将在 %@ 中启动" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "tmux-mirror：目前目錄已不存在；新工作階段將在 %@ 中啟動" } }
+      }
+    },
+    "cli.tmuxMirror.startDirectory.notEnterable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "tmux-mirror: cannot enter %@; the new session starts in %@" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "tmux-mirror: تعذّر الدخول إلى %@؛ ستبدأ الجلسة الجديدة في %@" } },
+        "de": { "stringUnit": { "state": "translated", "value": "tmux-mirror: %@ kann nicht betreten werden; die neue Sitzung startet in %@" } },
+        "es": { "stringUnit": { "state": "translated", "value": "tmux-mirror: no se puede entrar en %@; la nueva sesión empieza en %@" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "tmux-mirror : impossible d’entrer dans %@ ; la nouvelle session démarre dans %@" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "tmux-mirror: %@ に入れません。新しいセッションは %@ で開始します" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "tmux-mirror: %@에 들어갈 수 없습니다. 새 세션은 %@에서 시작합니다" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "tmux-mirror：无法进入 %@；新会话将在 %@ 中启动" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "tmux-mirror：無法進入 %@；新工作階段將在 %@ 中啟動" } }
+      }
+    },
+    "cli.tmuxMirror.startDirectory.controlCharacter": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "tmux-mirror: the current directory's path has a control character; the new session starts in %@" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "tmux-mirror: يحتوي مسار الدليل الحالي على حرف تحكم؛ ستبدأ الجلسة الجديدة في %@" } },
+        "de": { "stringUnit": { "state": "translated", "value": "tmux-mirror: Der Pfad des aktuellen Verzeichnisses enthält ein Steuerzeichen; die neue Sitzung startet in %@" } },
+        "es": { "stringUnit": { "state": "translated", "value": "tmux-mirror: la ruta del directorio actual contiene un carácter de control; la nueva sesión empieza en %@" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "tmux-mirror : le chemin du répertoire courant contient un caractère de contrôle ; la nouvelle session démarre dans %@" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "tmux-mirror: 現在のディレクトリのパスに制御文字が含まれています。新しいセッションは %@ で開始します" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "tmux-mirror: 현재 디렉터리 경로에 제어 문자가 있습니다. 새 세션은 %@에서 시작합니다" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "tmux-mirror：当前目录的路径包含控制字符；新会话将在 %@ 中启动" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "tmux-mirror：目前目錄的路徑包含控制字元；新工作階段將在 %@ 中啟動" } }
+      }
+    },
+    "cli.tmuxMirror.error.flagRequiresValue": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "tmux-mirror: %@ requires a value" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "tmux-mirror: يتطلب %@ قيمة" } },
+        "de": { "stringUnit": { "state": "translated", "value": "tmux-mirror: %@ erfordert einen Wert" } },
+        "es": { "stringUnit": { "state": "translated", "value": "tmux-mirror: %@ requiere un valor" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "tmux-mirror : %@ nécessite une valeur" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "tmux-mirror: %@ には値が必要です" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "tmux-mirror: %@에는 값이 필요합니다" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "tmux-mirror：%@ 需要一个值" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "tmux-mirror：%@ 需要一個值" } }
+      }
+    },
+    "cli.tmuxMirror.error.oneServer": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "tmux-mirror: pass --socket-name or --socket-path, not both" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "tmux-mirror: مرّر --socket-name أو --socket-path وليس كليهما" } },
+        "de": { "stringUnit": { "state": "translated", "value": "tmux-mirror: entweder --socket-name oder --socket-path angeben, nicht beide" } },
+        "es": { "stringUnit": { "state": "translated", "value": "tmux-mirror: indica --socket-name o --socket-path, no ambos" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "tmux-mirror : indiquez --socket-name ou --socket-path, pas les deux" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "tmux-mirror: --socket-name と --socket-path はどちらか一方だけを指定してください" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "tmux-mirror: --socket-name과 --socket-path 중 하나만 지정하세요" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "tmux-mirror：请只传入 --socket-name 或 --socket-path 其中之一" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "tmux-mirror：請只傳入 --socket-name 或 --socket-path 其中之一" } }
+      }
+    },
+    "cli.tmuxMirror.error.unknownFlag": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "tmux-mirror: unknown option %@" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "tmux-mirror: خيار غير معروف %@" } },
+        "de": { "stringUnit": { "state": "translated", "value": "tmux-mirror: unbekannte Option %@" } },
+        "es": { "stringUnit": { "state": "translated", "value": "tmux-mirror: opción desconocida %@" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "tmux-mirror : option inconnue %@" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "tmux-mirror: 不明なオプション %@" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "tmux-mirror: 알 수 없는 옵션 %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "tmux-mirror：未知选项 %@" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "tmux-mirror：未知選項 %@" } }
+      }
+    },
+    "cli.tmuxMirror.error.localTmuxSubcommand": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "tmux-mirror: '%@' is a cmux local-tmux command; run cmux local-tmux %@" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "tmux-mirror: الأمر '%@' من أوامر cmux local-tmux؛ شغّل cmux local-tmux %@" } },
+        "de": { "stringUnit": { "state": "translated", "value": "tmux-mirror: '%@' ist ein Befehl von cmux local-tmux; führe cmux local-tmux %@ aus" } },
+        "es": { "stringUnit": { "state": "translated", "value": "tmux-mirror: '%@' es un comando de cmux local-tmux; ejecuta cmux local-tmux %@" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "tmux-mirror : « %@ » est une commande de cmux local-tmux ; lancez cmux local-tmux %@" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "tmux-mirror: '%@' は cmux local-tmux のコマンドです。cmux local-tmux %@ を実行してください" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "tmux-mirror: '%@'은(는) cmux local-tmux 명령입니다. cmux local-tmux %@을(를) 실행하세요" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "tmux-mirror：'%@' 是 cmux local-tmux 的命令；请运行 cmux local-tmux %@" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "tmux-mirror：'%@' 是 cmux local-tmux 的指令；請執行 cmux local-tmux %@" } }
+      }
+    },
+    "cli.tmuxMirror.error.unknownSubcommand": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "tmux-mirror: unknown subcommand '%@'; use list or attach <session>" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "tmux-mirror: أمر فرعي غير معروف '%@'؛ استخدم list أو attach <session>" } },
+        "de": { "stringUnit": { "state": "translated", "value": "tmux-mirror: unbekannter Unterbefehl '%@'; verwende list oder attach <session>" } },
+        "es": { "stringUnit": { "state": "translated", "value": "tmux-mirror: subcomando desconocido '%@'; usa list o attach <session>" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "tmux-mirror : sous-commande inconnue « %@ » ; utilisez list ou attach <session>" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "tmux-mirror: 不明なサブコマンド '%@' です。list または attach <session> を使ってください" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "tmux-mirror: 알 수 없는 하위 명령 '%@'입니다. list 또는 attach <session>을 사용하세요" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "tmux-mirror：未知子命令 '%@'；请使用 list 或 attach <session>" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "tmux-mirror：未知子指令 '%@'；請使用 list 或 attach <session>" } }
+      }
+    },
+    "cli.tmuxMirror.error.extraArgument": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "tmux-mirror: unexpected argument '%@'" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "tmux-mirror: وسيطة غير متوقعة '%@'" } },
+        "de": { "stringUnit": { "state": "translated", "value": "tmux-mirror: unerwartetes Argument '%@'" } },
+        "es": { "stringUnit": { "state": "translated", "value": "tmux-mirror: argumento inesperado '%@'" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "tmux-mirror : argument inattendu « %@ »" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "tmux-mirror: 予期しない引数 '%@'" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "tmux-mirror: 예상하지 못한 인수 '%@'" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "tmux-mirror：意外的参数 '%@'" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "tmux-mirror：未預期的引數 '%@'" } }
+      }
+    },
+    "cli.tmuxMirror.error.listOptions": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "tmux-mirror list only accepts --socket-name or --socket-path" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "لا يقبل tmux-mirror list إلا --socket-name أو --socket-path" } },
+        "de": { "stringUnit": { "state": "translated", "value": "tmux-mirror list akzeptiert nur --socket-name oder --socket-path" } },
+        "es": { "stringUnit": { "state": "translated", "value": "tmux-mirror list solo acepta --socket-name o --socket-path" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "tmux-mirror list n’accepte que --socket-name ou --socket-path" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "tmux-mirror list に指定できるのは --socket-name または --socket-path だけです" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "tmux-mirror list에는 --socket-name 또는 --socket-path만 지정할 수 있습니다" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "tmux-mirror list 只接受 --socket-name 或 --socket-path" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "tmux-mirror list 只接受 --socket-name 或 --socket-path 參數" } }
+      }
+    },
+    "cli.tmuxMirror.error.attachRequiresSession": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "tmux-mirror attach requires a session name" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "يتطلب tmux-mirror attach اسم جلسة" } },
+        "de": { "stringUnit": { "state": "translated", "value": "tmux-mirror attach erfordert einen Sitzungsnamen" } },
+        "es": { "stringUnit": { "state": "translated", "value": "tmux-mirror attach requiere un nombre de sesión" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "tmux-mirror attach nécessite un nom de session" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "tmux-mirror attach にはセッション名が必要です" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "tmux-mirror attach에는 세션 이름이 필요합니다" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "tmux-mirror attach 需要会话名称" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "tmux-mirror attach 需要工作階段名稱" } }
+      }
+    },
+    "cli.tmuxMirror.error.unexpectedResponse": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "tmux-mirror: unexpected response from cmux" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "tmux-mirror: استجابة غير متوقعة من cmux" } },
+        "de": { "stringUnit": { "state": "translated", "value": "tmux-mirror: unerwartete Antwort von cmux" } },
+        "es": { "stringUnit": { "state": "translated", "value": "tmux-mirror: respuesta inesperada de cmux" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "tmux-mirror : réponse inattendue de cmux" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "tmux-mirror: cmux から予期しない応答がありました" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "tmux-mirror: cmux에서 예상하지 못한 응답을 받았습니다" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "tmux-mirror：cmux 返回了意外的响应" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "tmux-mirror：cmux 傳回了未預期的回應" } }
+      }
+    },
+    "cli.tmuxMirror.error.tmuxNotFound": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "tmux-mirror: tmux is not installed; install it with brew install tmux" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "tmux-mirror: البرنامج tmux غير مثبّت؛ ثبّته باستخدام brew install tmux" } },
+        "de": { "stringUnit": { "state": "translated", "value": "tmux-mirror: tmux ist nicht installiert; installiere es mit brew install tmux" } },
+        "es": { "stringUnit": { "state": "translated", "value": "tmux-mirror: tmux no está instalado; instálalo con brew install tmux" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "tmux-mirror : tmux n’est pas installé ; installez-le avec brew install tmux" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "tmux-mirror: tmux がインストールされていません。brew install tmux でインストールしてください" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "tmux-mirror: tmux가 설치되어 있지 않습니다. brew install tmux로 설치하세요" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "tmux-mirror：未安装 tmux；请使用 brew install tmux 安装" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "tmux-mirror：未安裝 tmux；請使用 brew install tmux 安裝" } }
+      }
+    },
+    "cli.tmuxMirror.error.tmuxFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "tmux-mirror: tmux failed: %@" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "tmux-mirror: فشل tmux: %@" } },
+        "de": { "stringUnit": { "state": "translated", "value": "tmux-mirror: tmux ist fehlgeschlagen: %@" } },
+        "es": { "stringUnit": { "state": "translated", "value": "tmux-mirror: tmux falló: %@" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "tmux-mirror : échec de tmux : %@" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "tmux-mirror: tmux が失敗しました: %@" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "tmux-mirror: tmux 실패: %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "tmux-mirror：tmux 失败：%@" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "tmux-mirror：tmux 失敗：%@" } }
+      }
+    },
+    "cli.tmuxMirror.list.empty": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "No tmux sessions on the server at %@." } },
+        "ar": { "stringUnit": { "state": "translated", "value": "لا توجد جلسات tmux على الخادم في %@." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Keine tmux-Sitzungen auf dem Server unter %@." } },
+        "es": { "stringUnit": { "state": "translated", "value": "No hay sesiones de tmux en el servidor de %@." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Aucune session tmux sur le serveur à %@." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@ のサーバーに tmux セッションはありません。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "%@의 서버에 tmux 세션이 없습니다." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "%@ 处的服务器上没有 tmux 会话。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "%@ 的伺服器上沒有 tmux 工作階段。" } }
+      }
+    },
+    "dialog.remoteTmux.newSessionFailed.localMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "tmux new-session failed. No workspace was created." } },
+        "ar": { "stringUnit": { "state": "translated", "value": "فشل tmux new-session. لم يتم إنشاء مساحة عمل." } },
+        "de": { "stringUnit": { "state": "translated", "value": "tmux new-session ist fehlgeschlagen. Es wurde kein Arbeitsbereich erstellt." } },
+        "es": { "stringUnit": { "state": "translated", "value": "tmux new-session falló. No se creó ningún espacio de trabajo." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "tmux new-session a échoué. Aucun espace de travail n’a été créé." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "tmux new-session が失敗しました。ワークスペースは作成されませんでした。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "tmux new-session이 실패했습니다. 워크스페이스가 만들어지지 않았습니다." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "tmux new-session 失败。未创建工作区。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "tmux new-session 失敗。未建立工作區。" } }
+      }
+    },
+    "remoteTmux.local.serverStopped.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "tmux server stopped" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "توقف خادم tmux" } },
+        "de": { "stringUnit": { "state": "translated", "value": "tmux-Server beendet" } },
+        "es": { "stringUnit": { "state": "translated", "value": "El servidor tmux se detuvo" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Serveur tmux arrêté" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "tmux サーバーが停止しました" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "tmux 서버가 중지됨" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "tmux 服务器已停止" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "tmux 伺服器已停止" } }
+      }
+    },
+    "remoteTmux.local.serverStopped.body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "The tmux server at %@ stopped, so its mirror workspaces ended." } },
+        "ar": { "stringUnit": { "state": "translated", "value": "توقف خادم tmux عند %@، لذلك انتهت مساحات العمل المعكوسة الخاصة به." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Der tmux-Server unter %@ wurde beendet, daher wurden seine Spiegel-Workspaces geschlossen." } },
+        "es": { "stringUnit": { "state": "translated", "value": "El servidor tmux de %@ se detuvo, así que sus espacios de trabajo reflejados terminaron." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Le serveur tmux à %@ s’est arrêté, ses espaces de travail miroirs ont donc pris fin." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@ の tmux サーバーが停止したため、そのミラーのワークスペースは終了しました。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "%@의 tmux 서버가 중지되어 미러 워크스페이스가 종료되었습니다." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "%@ 处的 tmux 服务器已停止，因此其镜像工作区已结束。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "%@ 的 tmux 伺服器已停止，因此其鏡像工作區已結束。" } }
+      }
+    },
+    "remoteTmux.local.destination": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "this Mac" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "جهاز Mac هذا" } },
+        "de": { "stringUnit": { "state": "translated", "value": "diesem Mac" } },
+        "es": { "stringUnit": { "state": "translated", "value": "este Mac" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "ce Mac" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "この Mac" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "이 Mac" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "此 Mac" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "此 Mac" } }
+      }
+    },
+    "remoteTmux.local.socket.directoryNotPrivate": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "other users can replace files in %@, so the tmux socket there cannot be trusted" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "يمكن لمستخدمين آخرين استبدال الملفات في %@، لذلك لا يمكن الوثوق بمقبس tmux هناك" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Andere Benutzer können Dateien in %@ ersetzen, daher ist dem tmux-Socket dort nicht zu trauen" } },
+        "es": { "stringUnit": { "state": "translated", "value": "otros usuarios pueden reemplazar archivos en %@, así que no se puede confiar en el socket de tmux de ahí" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "d’autres utilisateurs peuvent remplacer des fichiers dans %@, le socket tmux qui s’y trouve n’est donc pas fiable" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@ では他のユーザーがファイルを置き換えられるため、そこにある tmux ソケットは信頼できません" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "다른 사용자가 %@의 파일을 바꿀 수 있으므로 그곳의 tmux 소켓은 신뢰할 수 없습니다" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "其他用户可以替换 %@ 中的文件，因此那里的 tmux 套接字不可信" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "其他使用者可以取代 %@ 中的檔案，因此那裡的 tmux 通訊端不可信" } }
+      }
+    },
+    "remoteTmux.error.localCommandFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "local tmux failed (exit %d)" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "فشل tmux المحلي (رمز الخروج %d)" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Lokales tmux ist fehlgeschlagen (Exit-Code %d)" } },
+        "es": { "stringUnit": { "state": "translated", "value": "falló el tmux local (código de salida %d)" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "échec du tmux local (code de sortie %d)" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ローカルの tmux が失敗しました (終了コード %d)" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "로컬 tmux 실패(종료 코드 %d)" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "本地 tmux 失败（退出码 %d）" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "本機 tmux 失敗（結束代碼 %d）" } }
+      }
+    },
+    "remoteTmux.error.localCommandFailedWithDetail": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "local tmux failed (exit %d): %@" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "فشل tmux المحلي (رمز الخروج %d): %@" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Lokales tmux ist fehlgeschlagen (Exit-Code %d): %@" } },
+        "es": { "stringUnit": { "state": "translated", "value": "falló el tmux local (código de salida %d): %@" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "échec du tmux local (code de sortie %d) : %@" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ローカルの tmux が失敗しました (終了コード %d): %@" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "로컬 tmux 실패(종료 코드 %d): %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "本地 tmux 失败（退出码 %d）：%@" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "本機 tmux 失敗（結束代碼 %d）：%@" } }
+      }
+    },
+    "remoteTmux.error.localUnreachable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "local tmux mirror failed: %@" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "فشل انعكاس tmux المحلي: %@" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Lokaler tmux-Spiegel fehlgeschlagen: %@" } },
+        "es": { "stringUnit": { "state": "translated", "value": "falló el reflejo de tmux local: %@" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "échec du miroir tmux local : %@" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ローカルの tmux ミラーが失敗しました: %@" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "로컬 tmux 미러 실패: %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "本地 tmux 镜像失败：%@" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "本機 tmux 鏡像失敗：%@" } }
+      }
+    },
+    "remoteTmux.error.localVersionMismatch": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "the tmux on this Mac is a different version from the running tmux server, and tmux refuses to connect them (%@)" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "إصدار tmux على جهاز Mac هذا يختلف عن إصدار خادم tmux قيد التشغيل، ويرفض tmux الربط بينهما (%@)" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Das tmux auf diesem Mac hat eine andere Version als der laufende tmux-Server, und tmux verbindet die beiden nicht (%@)" } },
+        "es": { "stringUnit": { "state": "translated", "value": "el tmux de este Mac es de una versión distinta a la del servidor tmux en ejecución, y tmux se niega a conectarlos (%@)" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "le tmux de ce Mac n’a pas la même version que le serveur tmux en cours, et tmux refuse de les connecter (%@)" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "この Mac の tmux と実行中の tmux サーバーのバージョンが異なるため、tmux が接続を拒否しました (%@)" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "이 Mac의 tmux와 실행 중인 tmux 서버의 버전이 달라 tmux가 연결을 거부합니다(%@)" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "此 Mac 上的 tmux 与正在运行的 tmux 服务器版本不同，tmux 拒绝连接两者（%@）" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "此 Mac 上的 tmux 與正在執行的 tmux 伺服器版本不同，tmux 拒絕連接兩者（%@）" } }
+      }
+    },
+    "remoteTmux.error.localVersionsDiffer": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "the tmux server at %1$@ runs tmux %2$@, but its own tmux binary is gone, and the tmux cmux found, %3$@, is tmux %4$@. tmux cannot mirror across versions. To mirror this server, install tmux %2$@ in place of %3$@, or end the server with tmux -S %5$@ kill-server (this closes every session on it, with every program running in them) and start it again." } },
+        "ar": { "stringUnit": { "state": "translated", "value": "خادم tmux عند %1$@ يشغّل tmux %2$@، لكن ملفه التنفيذي لم يعد موجودًا، وtmux الذي وجده cmux، أي %3$@، هو tmux %4$@. لا يستطيع tmux النسخ المتطابق بين إصدارين مختلفين. لنسخ هذا الخادم، ثبّت tmux %2$@ مكان %3$@، أو أنهِ الخادم باستخدام tmux -S %5$@ kill-server (يغلق هذا كل جلسة عليه مع كل برنامج يعمل فيها) ثم شغّله من جديد." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Der tmux-Server unter %1$@ läuft mit tmux %2$@, aber seine eigene tmux-Datei ist nicht mehr vorhanden, und das von cmux gefundene tmux, %3$@, ist tmux %4$@. tmux kann nicht über Versionen hinweg spiegeln. Um diesen Server zu spiegeln, installiere tmux %2$@ anstelle von %3$@, oder beende den Server mit tmux -S %5$@ kill-server (das schließt jede Sitzung darauf mit allen Programmen, die darin laufen) und starte ihn neu." } },
+        "es": { "stringUnit": { "state": "translated", "value": "el servidor tmux de %1$@ ejecuta tmux %2$@, pero su propio binario de tmux ya no existe, y el tmux que encontró cmux, %3$@, es tmux %4$@. tmux no puede reflejar entre versiones distintas. Para reflejar este servidor, instala tmux %2$@ en lugar de %3$@, o termina el servidor con tmux -S %5$@ kill-server (esto cierra todas sus sesiones, con todos los programas que se ejecutan en ellas) y vuelve a iniciarlo." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "le serveur tmux à %1$@ exécute tmux %2$@, mais son propre binaire tmux n’existe plus, et le tmux trouvé par cmux, %3$@, est tmux %4$@. tmux ne peut pas faire de miroir entre versions. Pour refléter ce serveur, installez tmux %2$@ à la place de %3$@, ou arrêtez le serveur avec tmux -S %5$@ kill-server (cela ferme toutes ses sessions, avec tous les programmes qui y tournent) puis relancez-le." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%1$@ の tmux サーバーは tmux %2$@ で動いていますが、そのサーバー自身の tmux バイナリがなくなっており、cmux が見つけた tmux（%3$@）は tmux %4$@ です。tmux はバージョンをまたいでミラーできません。このサーバーをミラーするには、%3$@ の代わりに tmux %2$@ をインストールするか、tmux -S %5$@ kill-server でサーバーを終了して（そのサーバー上のすべてのセッションと、その中で動いているすべてのプログラムが閉じます）起動し直してください。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "%1$@의 tmux 서버는 tmux %2$@로 실행 중이지만 서버 자체의 tmux 바이너리가 없어졌고, cmux가 찾은 tmux(%3$@)는 tmux %4$@입니다. tmux는 서로 다른 버전 사이에서 미러링할 수 없습니다. 이 서버를 미러링하려면 %3$@ 대신 tmux %2$@을 설치하거나, tmux -S %5$@ kill-server로 서버를 종료한 뒤(서버의 모든 세션과 그 안에서 실행 중인 모든 프로그램이 닫힙니다) 다시 시작하세요." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "%1$@ 处的 tmux 服务器运行的是 tmux %2$@，但它自己的 tmux 可执行文件已不存在，而 cmux 找到的 tmux（%3$@）是 tmux %4$@。tmux 无法跨版本镜像。要镜像此服务器，请用 tmux %2$@ 替换 %3$@，或使用 tmux -S %5$@ kill-server 结束该服务器（这会关闭其上的所有会话以及其中运行的所有程序）后重新启动。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "%1$@ 的 tmux 伺服器執行的是 tmux %2$@，但它自己的 tmux 執行檔已不存在，而 cmux 找到的 tmux（%3$@）是 tmux %4$@。tmux 無法跨版本鏡像。要鏡像此伺服器，請用 tmux %2$@ 取代 %3$@，或使用 tmux -S %5$@ kill-server 結束該伺服器（這會關閉其上的所有工作階段以及其中執行的所有程式）後重新啟動。" } }
+      }
+    },
+    "remoteTmux.error.localReconnectGaveUp": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "the mirror lost its connection to tmux on this Mac and stopped after 3 reconnect attempts that got no answer. The session is still running; mirror it again to retry." } },
+        "ar": { "stringUnit": { "state": "translated", "value": "فقدت المرآة اتصالها بـ tmux على جهاز Mac هذا وتوقفت بعد 3 محاولات إعادة اتصال لم تتلقَّ أي رد. الجلسة ما زالت تعمل؛ اعكسها مرة أخرى لإعادة المحاولة." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Die Spiegelung hat ihre Verbindung zu tmux auf diesem Mac verloren und nach 3 unbeantworteten Verbindungsversuchen aufgehört. Die Sitzung läuft weiter; spiegele sie erneut, um es noch einmal zu versuchen." } },
+        "es": { "stringUnit": { "state": "translated", "value": "el reflejo perdió su conexión con tmux en este Mac y se detuvo tras 3 intentos de reconexión sin respuesta. La sesión sigue en ejecución; vuelve a reflejarla para intentarlo de nuevo." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "le miroir a perdu sa connexion à tmux sur ce Mac et s’est arrêté après 3 tentatives de reconnexion restées sans réponse. La session tourne toujours ; refaites le miroir pour réessayer." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ミラーはこの Mac の tmux との接続を失い、応答のない再接続を 3 回試みた後に停止しました。セッションは動き続けています。もう一度ミラーして再試行してください。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "미러가 이 Mac의 tmux와의 연결을 잃었고, 응답 없는 재연결 시도를 3번 한 뒤 중지되었습니다. 세션은 계속 실행 중입니다. 다시 미러링해 재시도하세요." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "镜像与此 Mac 上的 tmux 失去连接，在 3 次没有响应的重连尝试后停止。会话仍在运行；请重新镜像以重试。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "鏡像與此 Mac 上的 tmux 失去連線，在 3 次沒有回應的重新連線嘗試後停止。工作階段仍在執行；請重新鏡像以再試一次。" } }
+      }
+    },
+    "remoteTmux.mirrorEnded.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "tmux mirror ended" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "انتهت مرآة tmux" } },
+        "de": { "stringUnit": { "state": "translated", "value": "tmux-Spiegelung beendet" } },
+        "es": { "stringUnit": { "state": "translated", "value": "El reflejo de tmux terminó" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Miroir tmux terminé" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "tmux のミラーが終了しました" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "tmux 미러가 종료됨" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "tmux 镜像已结束" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "tmux 鏡像已結束" } }
+      }
+    },
+    "remoteTmux.error.localControlModeTimedOut": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "tmux on this Mac did not answer within 5 seconds, so cmux stopped its client. The session is still running; try again." } },
+        "ar": { "stringUnit": { "state": "translated", "value": "لم يستجب tmux على جهاز Mac هذا خلال 5 ثوانٍ، فأوقف cmux عميله. الجلسة ما زالت تعمل؛ حاول مرة أخرى." } },
+        "de": { "stringUnit": { "state": "translated", "value": "tmux auf diesem Mac hat nicht innerhalb von 5 Sekunden geantwortet, daher hat cmux seinen Client beendet. Die Sitzung läuft weiter; versuche es erneut." } },
+        "es": { "stringUnit": { "state": "translated", "value": "tmux en este Mac no respondió en 5 segundos, así que cmux detuvo su cliente. La sesión sigue en ejecución; vuelve a intentarlo." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "tmux sur ce Mac n’a pas répondu dans les 5 secondes, donc cmux a arrêté son client. La session tourne toujours ; réessayez." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "この Mac の tmux が 5 秒以内に応答しなかったため、cmux がクライアントを停止しました。セッションは動き続けています。もう一度お試しください。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "이 Mac의 tmux가 5초 안에 응답하지 않아 cmux가 클라이언트를 중지했습니다. 세션은 계속 실행 중입니다. 다시 시도하세요." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "此 Mac 上的 tmux 在 5 秒内没有响应，因此 cmux 停止了它的客户端。会话仍在运行；请重试。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "此 Mac 上的 tmux 在 5 秒內沒有回應，因此 cmux 停止了它的用戶端。工作階段仍在執行；請再試一次。" } }
+      }
+    },
+    "remoteTmux.error.localTmuxTimedOut": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "the tmux server at %@ did not answer in time; it may be frozen" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "لم يستجب خادم tmux عند %@ في الوقت المحدد؛ ربما توقف عن الاستجابة" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Der tmux-Server unter %@ hat nicht rechtzeitig geantwortet; er hängt möglicherweise" } },
+        "es": { "stringUnit": { "state": "translated", "value": "el servidor tmux de %@ no respondió a tiempo; puede que esté bloqueado" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "le serveur tmux à %@ n’a pas répondu à temps ; il est peut-être figé" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@ の tmux サーバーが時間内に応答しませんでした。固まっている可能性があります" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "%@의 tmux 서버가 제시간에 응답하지 않았습니다. 멈췄을 수 있습니다" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "%@ 处的 tmux 服务器没有及时响应；它可能已卡住" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "%@ 的 tmux 伺服器沒有及時回應；它可能已卡住" } }
+      }
+    },
+    "remoteTmux.error.localServerNotRunning": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "no tmux server is running at %@; run cmux tmux-mirror from a shell to start one" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "لا يعمل أي خادم tmux عند %@؛ شغّل cmux tmux-mirror من صدفة لبدء خادم" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Unter %@ läuft kein tmux-Server; führe cmux tmux-mirror in einer Shell aus, um einen zu starten" } },
+        "es": { "stringUnit": { "state": "translated", "value": "no hay ningún servidor tmux en ejecución en %@; ejecuta cmux tmux-mirror desde una shell para iniciar uno" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "aucun serveur tmux ne tourne à %@ ; lancez cmux tmux-mirror depuis un shell pour en démarrer un" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@ で tmux サーバーが動いていません。シェルから cmux tmux-mirror を実行して起動してください" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "%@에서 실행 중인 tmux 서버가 없습니다. 셸에서 cmux tmux-mirror를 실행해 서버를 시작하세요" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "%@ 处没有正在运行的 tmux 服务器；请在 shell 中运行 cmux tmux-mirror 来启动一个" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "%@ 沒有正在執行的 tmux 伺服器；請在 shell 中執行 cmux tmux-mirror 來啟動一個" } }
+      }
+    },
+    "cli.tmuxMirror.error.tmuxTimedOut": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "tmux-mirror: tmux did not answer in time; the server may be frozen" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "tmux-mirror: لم يستجب tmux في الوقت المحدد؛ ربما توقف الخادم عن الاستجابة" } },
+        "de": { "stringUnit": { "state": "translated", "value": "tmux-mirror: tmux hat nicht rechtzeitig geantwortet; der Server hängt möglicherweise" } },
+        "es": { "stringUnit": { "state": "translated", "value": "tmux-mirror: tmux no respondió a tiempo; puede que el servidor esté bloqueado" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "tmux-mirror : tmux n’a pas répondu à temps ; le serveur est peut-être figé" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "tmux-mirror: tmux が時間内に応答しませんでした。サーバーが固まっている可能性があります" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "tmux-mirror: tmux가 제시간에 응답하지 않았습니다. 서버가 멈췄을 수 있습니다" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "tmux-mirror：tmux 没有及时响应；服务器可能已卡住" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "tmux-mirror：tmux 沒有及時回應；伺服器可能已卡住" } }
+      }
+    },
+    "remoteTmux.error.localTmuxNotFound": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "tmux was not found on this Mac. cmux tmux-mirror needs tmux %@ or newer; install it with brew install tmux." } },
+        "ar": { "stringUnit": { "state": "translated", "value": "لم يُعثر على tmux على جهاز Mac هذا. يتطلب cmux tmux-mirror الإصدار %@ من tmux أو أحدث؛ ثبّته باستخدام brew install tmux." } },
+        "de": { "stringUnit": { "state": "translated", "value": "tmux wurde auf diesem Mac nicht gefunden. cmux tmux-mirror benötigt tmux %@ oder neuer; installiere es mit brew install tmux." } },
+        "es": { "stringUnit": { "state": "translated", "value": "No se encontró tmux en este Mac. cmux tmux-mirror necesita tmux %@ o posterior; instálalo con brew install tmux." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "tmux est introuvable sur ce Mac. cmux tmux-mirror nécessite tmux %@ ou plus récent ; installez-le avec brew install tmux." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "この Mac に tmux が見つかりません。cmux tmux-mirror には tmux %@ 以降が必要です。brew install tmux でインストールしてください。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "이 Mac에서 tmux를 찾을 수 없습니다. cmux tmux-mirror에는 tmux %@ 이상이 필요합니다. brew install tmux로 설치하세요." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "在此 Mac 上找不到 tmux。cmux tmux-mirror 需要 tmux %@ 或更高版本；请使用 brew install tmux 安装。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "在此 Mac 上找不到 tmux。cmux tmux-mirror 需要 tmux %@ 或更新版本；請使用 brew install tmux 安裝。" } }
+      }
+    },
+    "remoteTmux.error.localUnsupportedVersion": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "the local tmux is too old (found %@; cmux needs version %@ or newer)" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "إصدار tmux المحلي قديم جدًا (عُثر على %@؛ يحتاج cmux إلى الإصدار %@ أو أحدث)" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Das lokale tmux ist zu alt (gefunden: %@; cmux benötigt Version %@ oder neuer)" } },
+        "es": { "stringUnit": { "state": "translated", "value": "el tmux local es demasiado antiguo (se encontró %@; cmux necesita la versión %@ o posterior)" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "le tmux local est trop ancien (version %@ trouvée ; cmux nécessite la version %@ ou plus récente)" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ローカルの tmux が古すぎます（検出: %@、cmux にはバージョン %@ 以降が必要です）" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "로컬 tmux가 너무 오래되었습니다(발견: %@, cmux에는 버전 %@ 이상이 필요합니다)" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "本地 tmux 版本过旧（检测到 %@；cmux 需要 %@ 或更高版本）" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "本機 tmux 版本過舊（偵測到 %@；cmux 需要 %@ 或更新版本）" } }
+      }
+    },
+    "remoteTmux.error.localLaunchFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "failed to start local tmux: %@" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "تعذّر تشغيل tmux المحلي: %@" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Lokales tmux konnte nicht gestartet werden: %@" } },
+        "es": { "stringUnit": { "state": "translated", "value": "no se pudo iniciar el tmux local: %@" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "impossible de démarrer le tmux local : %@" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ローカルの tmux を起動できませんでした: %@" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "로컬 tmux를 시작하지 못했습니다: %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法启动本地 tmux：%@" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "無法啟動本機 tmux：%@" } }
+      }
+    },
+    "remoteTmux.local.parameterNotAllowed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "%@ does not apply to a local tmux server; pass socket_path only" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "لا ينطبق %@ على خادم tmux محلي؛ مرّر socket_path فقط" } },
+        "de": { "stringUnit": { "state": "translated", "value": "%@ gilt nicht für einen lokalen tmux-Server; nur socket_path angeben" } },
+        "es": { "stringUnit": { "state": "translated", "value": "%@ no se aplica a un servidor tmux local; indica solo socket_path" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "%@ ne s’applique pas à un serveur tmux local ; indiquez uniquement socket_path" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@ はローカルの tmux サーバーには使えません。socket_path のみを指定してください" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "%@은(는) 로컬 tmux 서버에 적용되지 않습니다. socket_path만 지정하세요" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "%@ 不适用于本地 tmux 服务器；请只传入 socket_path" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "%@ 不適用於本機 tmux 伺服器；請只傳入 socket_path" } }
+      }
+    },
+    "remoteTmux.local.socketPathRequired": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "socket_path is required for a local tmux server" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "يلزم تحديد socket_path لخادم tmux محلي" } },
+        "de": { "stringUnit": { "state": "translated", "value": "socket_path ist für einen lokalen tmux-Server erforderlich" } },
+        "es": { "stringUnit": { "state": "translated", "value": "socket_path es obligatorio para un servidor tmux local" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "socket_path est requis pour un serveur tmux local" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ローカルの tmux サーバーには socket_path が必要です" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "로컬 tmux 서버에는 socket_path가 필요합니다" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "本地 tmux 服务器需要 socket_path" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "本機 tmux 伺服器需要 socket_path" } }
+      }
+    },
+    "remoteTmux.local.socket.notAbsolute": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "the tmux socket path must be absolute" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "يجب أن يكون مسار مقبس tmux مطلقًا" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Der tmux-Socket-Pfad muss absolut sein" } },
+        "es": { "stringUnit": { "state": "translated", "value": "la ruta del socket de tmux debe ser absoluta" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "le chemin du socket tmux doit être absolu" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "tmux ソケットのパスは絶対パスで指定してください" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "tmux 소켓 경로는 절대 경로여야 합니다" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "tmux 套接字路径必须是绝对路径" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "tmux 通訊端路徑必須是絕對路徑" } }
+      }
+    },
+    "remoteTmux.local.socket.hiddenCharacter": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "the tmux socket path contains a control or hidden character" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "يحتوي مسار مقبس tmux على حرف تحكم أو حرف مخفي" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Der tmux-Socket-Pfad enthält ein Steuer- oder unsichtbares Zeichen" } },
+        "es": { "stringUnit": { "state": "translated", "value": "la ruta del socket de tmux contiene un carácter de control u oculto" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "le chemin du socket tmux contient un caractère de contrôle ou invisible" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "tmux ソケットのパスに制御文字または不可視文字が含まれています" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "tmux 소켓 경로에 제어 문자 또는 숨겨진 문자가 있습니다" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "tmux 套接字路径包含控制字符或隐藏字符" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "tmux 通訊端路徑包含控制字元或隱藏字元" } }
+      }
+    },
+    "remoteTmux.local.socket.missing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "no tmux server socket at %@; is tmux running?" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "لا يوجد مقبس لخادم tmux في %@؛ هل tmux قيد التشغيل؟" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Kein tmux-Server-Socket unter %@; läuft tmux?" } },
+        "es": { "stringUnit": { "state": "translated", "value": "no hay ningún socket de servidor tmux en %@; ¿se está ejecutando tmux?" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "aucun socket de serveur tmux à %@ ; tmux est-il lancé ?" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@ に tmux サーバーのソケットがありません。tmux は起動していますか？" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "%@에 tmux 서버 소켓이 없습니다. tmux가 실행 중인가요?" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "%@ 处没有 tmux 服务器套接字；tmux 是否在运行？" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "%@ 沒有 tmux 伺服器通訊端；tmux 是否正在執行？" } }
+      }
+    },
+    "remoteTmux.local.socket.notASocket": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "%@ is not a tmux server socket" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "المسار %@ ليس مقبسًا لخادم tmux" } },
+        "de": { "stringUnit": { "state": "translated", "value": "%@ ist kein tmux-Server-Socket" } },
+        "es": { "stringUnit": { "state": "translated", "value": "%@ no es un socket de servidor tmux" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "%@ n’est pas un socket de serveur tmux" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@ は tmux サーバーのソケットではありません" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "%@은(는) tmux 서버 소켓이 아닙니다" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "%@ 不是 tmux 服务器套接字" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "%@ 不是 tmux 伺服器通訊端" } }
+      }
+    },
+    "remoteTmux.local.socket.notOwned": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "the tmux socket %@ belongs to another user" } },
+        "ar": { "stringUnit": { "state": "translated", "value": "مقبس tmux في %@ يخص مستخدمًا آخر" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Der tmux-Socket %@ gehört einem anderen Benutzer" } },
+        "es": { "stringUnit": { "state": "translated", "value": "el socket de tmux %@ pertenece a otro usuario" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "le socket tmux %@ appartient à un autre utilisateur" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "tmux ソケット %@ は別のユーザーのものです" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "tmux 소켓 %@은(는) 다른 사용자의 소유입니다" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "tmux 套接字 %@ 属于其他用户" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "tmux 通訊端 %@ 屬於其他使用者" } }
+      }
+    },
     "socket.remoteTmux.transportHelperPathInvalid": {
       "extractionState": "manual",
       "localizations": {
@@ -645073,55 +645675,55 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "transport is not one cmux knows; use ssh or et"
+            "value": "transport is not one cmux knows; use ssh, et or local"
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "قيمة transport ليست نقلًا يعرفه cmux؛ استخدم ssh أو et"
+            "value": "قيمة transport ليست نقلًا يعرفه cmux؛ استخدم ssh أو et أو local"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "transport ist kein Transport, den cmux kennt; verwenden Sie ssh oder et"
+            "value": "transport ist kein Transport, den cmux kennt; verwenden Sie ssh, et oder local"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "transport no es un transporte que cmux conozca; usa ssh o et"
+            "value": "transport no es un transporte que cmux conozca; usa ssh, et o local"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "transport n’est pas un transport connu de cmux ; utilisez ssh ou et"
+            "value": "transport n’est pas un transport connu de cmux ; utilisez ssh, et ou local"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "transport は cmux が対応していない値です。ssh または et を使用してください"
+            "value": "transport は cmux が対応していない値です。ssh、et または local を使用してください"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "transport가 cmux가 아는 값이 아닙니다. ssh 또는 et를 사용하세요"
+            "value": "transport가 cmux가 아는 값이 아닙니다. ssh, et 또는 local을 사용하세요"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "transport 不是 cmux 支持的传输方式；请使用 ssh 或 et"
+            "value": "transport 不是 cmux 支持的传输方式；请使用 ssh、et 或 local"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "transport 不是 cmux 支援的傳輸方式；請使用 ssh 或 et"
+            "value": "transport 不是 cmux 支援的傳輸方式；請使用 ssh、et 或 local"
           }
         }
       }

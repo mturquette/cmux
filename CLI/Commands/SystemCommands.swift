@@ -414,6 +414,17 @@ struct SSHTmuxCommand: SharedLegacyFacadeCommand {
     static let configuration = CommandConfiguration(commandName: "ssh-tmux", helpNames: [])
 }
 
+struct TmuxMirrorCommand: SharedLegacyFacadeCommand {
+    @Option(name: .customLong("socket-name")) var socketName: String?
+    @Option(name: .customLong("socket-path"), completion: .file()) var socketPath: String?
+    @Option(name: .customLong("name")) var name: String?
+    @Flag(name: .customLong("new-window")) var newWindow = false
+    @Flag(name: .customLong("focus")) var focus = false
+    @Flag(name: .customLong("no-focus")) var noFocus = false
+    @Argument(parsing: .allUnrecognized) var arguments: [String] = []
+    static let configuration = CommandConfiguration(commandName: "tmux-mirror", helpNames: [])
+}
+
 struct LocalTmuxCommand: SharedLegacyFacadeCommand {
     // See VMCommand's comment: no catch-all argument alongside `subcommands`, and
     // `defaultSubcommand` absorbs anything that doesn't name a declared one. The

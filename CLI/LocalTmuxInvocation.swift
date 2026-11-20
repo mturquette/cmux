@@ -235,6 +235,7 @@ struct LocalTmuxInvocation {
         String(localized: "cli.localTmux.usage", defaultValue: """
     Usage: cmux local-tmux <start|attach|list|status|detach|close|cleanup> [session] [options]
 
+    To show an existing tmux server's sessions as workspaces, use cmux tmux-mirror.
     Opt-in local tmux sessions survive cmux quit, crash, and app updates.
     Ordinary cmux terminals are unchanged.
 
