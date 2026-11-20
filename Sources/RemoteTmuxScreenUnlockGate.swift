@@ -25,13 +25,14 @@ final class RemoteTmuxScreenUnlockGate {
 
     /// - Parameters:
     ///   - isLocked: whether the screen is locked right now.
-    ///   - unlockSignals: the notifications that end the wait.
+    ///   - unlockSignals: the notifications that end the wait; `nil` means the live ones.
+    ///     Resolved in the body, because a default argument is evaluated outside the main actor.
     init(
         isLocked: @escaping @MainActor () -> Bool = { RemoteTmuxScreenUnlockGate.liveScreenIsLocked() },
-        unlockSignals: [UnlockSignal] = RemoteTmuxScreenUnlockGate.liveUnlockSignals()
+        unlockSignals: [UnlockSignal]? = nil
     ) {
         self.isLocked = isLocked
-        self.unlockSignals = unlockSignals
+        self.unlockSignals = unlockSignals ?? Self.liveUnlockSignals()
     }
 
     /// Returns once the screen is unlocked, immediately if it already is, or when the calling
