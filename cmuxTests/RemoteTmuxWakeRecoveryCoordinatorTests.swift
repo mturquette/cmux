@@ -97,12 +97,16 @@ import Testing
     private static let hostA = RemoteTmuxHost(destination: "user@a.wake.test")
     private static let hostB = RemoteTmuxHost(destination: "user@b.wake.test")
 
-    private func group(
-        _ host: RemoteTmuxHost = hostA,
+    private func hostGroup(
+        _ host: RemoteTmuxHost = Self.hostA,
         _ recovery: RemoteTmuxWakeRecovery = .checkThenRenewSharedConnection,
         _ streams: [FakeStream]
     ) -> RemoteTmuxWakeHostGroup {
         RemoteTmuxWakeHostGroup(host: host, recovery: recovery, streams: streams)
+    }
+
+    private func hostGroup(_ streams: [FakeStream]) -> RemoteTmuxWakeHostGroup {
+        hostGroup(Self.hostA, .checkThenRenewSharedConnection, streams)
     }
 
     private func recoverAndWait(
@@ -122,7 +126,7 @@ import Testing
         let coordinator = RemoteTmuxWakeRecoveryCoordinator(environment: environment, checkTimeoutSeconds: 5)
         let streams = (1...3).map { FakeStream("s\($0)", .connected, answers: false, log: log) }
 
-        let started = await recoverAndWait(coordinator, [group(streams)])
+        let started = await recoverAndWait(coordinator, [hostGroup(streams)])
 
         #expect(started == 1)
         #expect(log.events == [
@@ -141,7 +145,7 @@ import Testing
         let coordinator = RemoteTmuxWakeRecoveryCoordinator(environment: FakeEnvironment(log: log))
         let streams = [FakeStream("s1", .connected, log: log), FakeStream("s2", .connected, log: log)]
 
-        _ = await recoverAndWait(coordinator, [group(streams)])
+        _ = await recoverAndWait(coordinator, [hostGroup(streams)])
 
         #expect(log.events == ["check s1", "check s2"])
         #expect(streams.allSatisfy { $0.phase == .connected })
@@ -157,7 +161,7 @@ import Testing
             FakeStream("s2", .connected, log: log),
         ]
 
-        _ = await recoverAndWait(coordinator, [group(streams)])
+        _ = await recoverAndWait(coordinator, [hostGroup(streams)])
 
         #expect(log.events == [
             "hold s1", "hold s2", "unlock-wait", "unlocked",
@@ -172,7 +176,7 @@ import Testing
         let parked = FakeStream("parked", .waitingForLogin, log: log)
         let silent = FakeStream("silent", .connected, answers: false, log: log)
 
-        _ = await recoverAndWait(coordinator, [group([parked, silent])])
+        _ = await recoverAndWait(coordinator, [hostGroup([parked, silent])])
 
         #expect(parked.phase == .waitingForLogin)
         #expect(!log.events.contains { $0.hasSuffix(" parked") })
@@ -189,7 +193,7 @@ import Testing
         let coordinator = RemoteTmuxWakeRecoveryCoordinator(environment: environment)
         let stream = FakeStream("s1", .connected, answers: false, log: log)
 
-        let started = coordinator.recover([group([stream])])
+        let started = coordinator.recover([hostGroup([stream])])
         for await _ in environment.reachedUnlockWait { break }
 
         #expect(stream.phase == .heldForWake)
@@ -211,9 +215,9 @@ import Testing
         let coordinator = RemoteTmuxWakeRecoveryCoordinator(environment: environment)
         let stream = FakeStream("s1", .connected, answers: false, log: log)
 
-        let first = coordinator.recover([group([stream])])
+        let first = coordinator.recover([hostGroup([stream])])
         for await _ in environment.reachedUnlockWait { break }
-        let second = coordinator.recover([group([stream])])
+        let second = coordinator.recover([hostGroup([stream])])
         #expect(first.count == 1)
         #expect(second.isEmpty)
 
@@ -222,7 +226,7 @@ import Testing
         #expect(log.events.filter { $0.hasPrefix("renew") }.count == 1)
 
         environment.unlockGate = nil
-        let third = await recoverAndWait(coordinator, [group([FakeStream("s2", .connected, log: log)])])
+        let third = await recoverAndWait(coordinator, [hostGroup([FakeStream("s2", .connected, log: log)])])
         #expect(third == 1)
     }
 
@@ -235,7 +239,7 @@ import Testing
             FakeStream("s2", .waitingToRetry, log: log),
         ]
 
-        _ = await recoverAndWait(coordinator, [group(hostA, .nothing, streams)])
+        _ = await recoverAndWait(coordinator, [hostGroup(Self.hostA, .nothing, streams)])
 
         #expect(log.events.isEmpty)
     }
@@ -249,7 +253,7 @@ import Testing
         let inFlight = FakeStream("inflight", .retryInFlight, log: log)
         let connected = FakeStream("connected", .connected, answers: false, log: log)
 
-        _ = await recoverAndWait(coordinator, [group(hostA, .retryWaitingAttemptsNow, [waiting, inFlight, connected])])
+        _ = await recoverAndWait(coordinator, [hostGroup(Self.hostA, .retryWaitingAttemptsNow, [waiting, inFlight, connected])])
 
         #expect(log.events == ["retry waiting"])
         #expect(connected.phase == .connected)
@@ -266,7 +270,7 @@ import Testing
             FakeStream("s3", .connected, log: log),
         ]
 
-        _ = await recoverAndWait(coordinator, [group(streams)])
+        _ = await recoverAndWait(coordinator, [hostGroup(streams)])
 
         #expect(log.events == [
             "check s1", "check s2",
@@ -283,7 +287,7 @@ import Testing
         let attaching = FakeStream("attaching", .attaching, log: log)
         let silent = FakeStream("silent", .connected, answers: false, log: log)
 
-        _ = await recoverAndWait(coordinator, [group([attaching, silent])])
+        _ = await recoverAndWait(coordinator, [hostGroup([attaching, silent])])
 
         #expect(attaching.phase == .attaching)
         #expect(!log.events.contains { $0.hasSuffix(" attaching") })
@@ -300,7 +304,7 @@ import Testing
             FakeStream("s2", .retryInFlight, log: log),
         ]
 
-        _ = await recoverAndWait(coordinator, [group(streams)])
+        _ = await recoverAndWait(coordinator, [hostGroup(streams)])
 
         #expect(streams.allSatisfy { $0.phase == .retryInFlight })
         #expect(log.events.suffix(2) == ["resume s1", "resume s2"])
@@ -313,8 +317,8 @@ import Testing
         let dead = FakeStream("dead", .connected, answers: false, log: log)
         let healthy = FakeStream("healthy", .connected, log: log)
 
-        let started = await recoverAndWait(coordinator, [group(hostA, .checkThenRenewSharedConnection, [dead]),
-                                                         group(hostB, .checkThenRenewSharedConnection, [healthy])])
+        let started = await recoverAndWait(coordinator, [hostGroup(Self.hostA, .checkThenRenewSharedConnection, [dead]),
+                                                         hostGroup(Self.hostB, .checkThenRenewSharedConnection, [healthy])])
 
         #expect(started == 2)
         #expect(log.events.filter { $0.hasPrefix("renew") } == ["renew user@a.wake.test"])
