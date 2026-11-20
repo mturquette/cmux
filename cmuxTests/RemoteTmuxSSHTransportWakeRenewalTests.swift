@@ -26,19 +26,32 @@ import Testing
         func remove() { try? FileManager.default.removeItem(at: root) }
     }
 
-    private func makeFakeSSH(openSucceeds: Bool) throws -> FakeSSH {
+    /// - Parameter holdFirstCheck: when true, the first `-O check` reads the master's state, logs
+    ///   it, and then does not return until the test creates the `release` file, so a warm-up can be
+    ///   caught after it has seen the old master but before it reports.
+    private func makeFakeSSH(openSucceeds: Bool, holdFirstCheck: Bool = false) throws -> FakeSSH {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("remote-tmux-renew-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let log = root.appendingPathComponent("log")
         let marker = root.appendingPathComponent("master")
+        let release = root.appendingPathComponent("release")
+        let firstDone = root.appendingPathComponent("first-check-done")
         let executable = root.appendingPathComponent("ssh")
         let open = openSucceeds ? "touch '\(marker.path)'; exit 0" : "exit 255"
+        if !holdFirstCheck { FileManager.default.createFile(atPath: release.path, contents: Data()) }
         try """
         #!/bin/sh
         case " $* " in
           *" -O exit "*) echo exit >> '\(log.path)'; rm -f '\(marker.path)'; exit 0 ;;
-          *" -O check "*) echo check >> '\(log.path)'; [ -f '\(marker.path)' ] && exit 0; exit 255 ;;
+          *" -O check "*)
+            if [ -f '\(marker.path)' ]; then r=0; else r=255; fi
+            echo check >> '\(log.path)'
+            if [ ! -f '\(firstDone.path)' ]; then
+              touch '\(firstDone.path)'
+              while [ ! -f '\(release.path)' ]; do sleep 0.05; done
+            fi
+            exit $r ;;
           *) echo open >> '\(log.path)'; \(open) ;;
         esac
         """.write(to: executable, atomically: true, encoding: .utf8)
@@ -77,5 +90,42 @@ import Testing
 
         #expect(renewed == false)
         #expect(ssh.calls() == ["exit", "check", "open", "check"])
+    }
+
+    // Review F3: a renewal that starts while another caller's warm-up is in flight, after that
+    // warm-up has already seen the old master answer, must not report the old master's result.
+    // It closes the old master and then confirms a fresh one of its own.
+    @Test(.timeLimit(.minutes(1)))
+    func aRenewalDoesNotJoinAWarmUpThatSawTheOldMaster() async throws {
+        let ssh = try makeFakeSSH(openSucceeds: true, holdFirstCheck: true)
+        defer { ssh.remove() }
+        let transport = transport(ssh)
+
+        let earlier = Task { try await transport.ensureMasterReady() }
+        try await waitUntil { ssh.calls().contains("check") }
+        let renewal = Task { await transport.renewSharedMaster() }
+        // A renewal that joins the earlier warm-up closes the master at once; give it the chance
+        // to, then let the earlier warm-up report what it saw.
+        try? await waitUntil(limitSeconds: 2) { ssh.calls().contains("exit") }
+        FileManager.default.createFile(atPath: ssh.root.appendingPathComponent("release").path, contents: Data())
+
+        _ = try await earlier.value
+        let renewed = await renewal.value
+
+        #expect(renewed)
+        #expect(FileManager.default.fileExists(atPath: ssh.marker.path))
+        #expect(Array(ssh.calls().drop { $0 != "exit" }) == ["exit", "check", "open", "check"])
+    }
+
+    private struct WaitTimedOut: Error {}
+
+    /// Polls a condition on the fake's log file until it holds or `limitSeconds` pass. The fake is
+    /// a separate process that reports only through files, so there is no event to await.
+    private func waitUntil(limitSeconds: Double = 10, _ condition: () -> Bool) async throws {
+        let deadline = ContinuousClock.now + .seconds(limitSeconds)
+        while !condition() {
+            guard ContinuousClock.now < deadline else { throw WaitTimedOut() }
+            try await ContinuousClock().sleep(for: .milliseconds(20))
+        }
     }
 }

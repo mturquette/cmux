@@ -12,7 +12,9 @@ protocol RemoteTmuxWakeRecoveryEnvironment: AnyObject {
 
     /// Closes the host's shared ssh connection and opens one fresh one.
     ///
-    /// - Returns: whether the fresh connection was confirmed ready. Callers release their
-    ///   streams either way; a stream whose attempt then fails keeps its own backoff.
+    /// - Returns: whether the fresh connection was confirmed ready.
     func renewSharedConnection(for host: RemoteTmuxHost) async -> Bool
+
+    /// Waits before the next renewal after renewal attempt `attempt` (counted from 0) failed.
+    func waitBeforeRenewalRetry(attempt: Int) async
 }

@@ -72,6 +72,8 @@ BASELINE_FILE="${LINT_BASELINE_FILE:-scripts/remote-tmux-polling-baseline.txt}"
 ALLOW=(
   "Sources/RemoteTmuxControlConnection.swift:scheduleReconnectAttempt:try await ContinuousClock().sleep(for: .seconds(delay))"
   "Reconnect backoff for a host that is unreachable. The edge would be 'the host came back', which nothing local can observe; retrying IS the observation."
+  "Sources/RemoteTmuxLiveWakeRecoveryEnvironment.swift:waitBeforeRenewalRetry:try? await ContinuousClock().sleep(for: .seconds(seconds))"
+  "Backoff between wake renewals of an unreachable host's shared master, the same case as the reconnect backoff: 'the host came back' has no local edge, so the renewal is the observation."
   "Sources/RemoteTmuxSessionMirror+OutputRouting.swift:schedulePaneSeedDeliveryDeadline:try await ContinuousClock().sleep(for: .seconds(5))"
   "Deadline arm on a pane's readiness wait: the task is cancelled when the surface becomes ready, and on expiry the seed is drained or gracefully deferred rather than retried"
   "Sources/RemoteTmuxControlConnection+PaneSubscriptions.swift:queryOutcomeWithTimeout:try? await Task.sleep(nanoseconds: UInt64(max(0, timeout) * 1_000_000_000))"

@@ -1695,7 +1695,9 @@ final class RemoteTmuxControlConnection {
             } catch {
                 return
             }
-            guard let self, self.connectionState == .reconnecting else { return }
+            // A stream held for wake recovery cancels this task; the held check is the second
+            // safeguard, so a missed cancel can never spawn over the old master while it is held.
+            guard let self, self.connectionState == .reconnecting, !self.reconnectHeldForWake else { return }
             // A transport that compares releases checks the client it is about to start, as
             // attach does. After `brew upgrade` deleted the server's binary, the fallback can be a
             // release that never answers in control mode, and the reconnect would otherwise retry

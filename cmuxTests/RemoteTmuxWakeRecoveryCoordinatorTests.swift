@@ -69,6 +69,10 @@ import Testing
     final class FakeEnvironment: RemoteTmuxWakeRecoveryEnvironment {
         let log: EventLog
         var renewResult = true
+        /// When non-empty, each renewal takes the next result from here instead of `renewResult`.
+        var renewResults: [Bool] = []
+        /// Runs during each wait between renewal attempts, so a test can change the streams then.
+        var duringRenewalWait: ((Int) -> Void)?
         /// When set, the unlock wait lasts until the test yields into it.
         var unlockGate: AsyncStream<Void>?
         let reachedUnlockWait: AsyncStream<Void>
@@ -90,7 +94,12 @@ import Testing
 
         func renewSharedConnection(for host: RemoteTmuxHost) async -> Bool {
             log.append("renew \(host.destination)")
-            return renewResult
+            return renewResults.isEmpty ? renewResult : renewResults.removeFirst()
+        }
+
+        func waitBeforeRenewalRetry(attempt: Int) async {
+            log.append("renew-wait \(attempt)")
+            duringRenewalWait?(attempt)
         }
     }
 
@@ -151,20 +160,55 @@ import Testing
         #expect(streams.allSatisfy { $0.phase == .connected })
     }
 
-    // R7: a stream already reconnecting needs no check; the host is renewed and every stream on
-    // it is held, since closing the shared connection ends them all.
-    @Test func aStreamAlreadyReconnectingRenewsTheHostWithoutChecks() async {
+    // R3, R7, review F1: a stream in backoff beside healthy streams is retried now over the
+    // master the healthy streams just proved alive. Nothing is torn down and nothing is renewed.
+    @Test func aStreamInBackoffBesideHealthyStreamsIsRetriedWithoutRenewal() async {
         let log = EventLog()
         let coordinator = RemoteTmuxWakeRecoveryCoordinator(environment: FakeEnvironment(log: log))
         let streams = [
             FakeStream("s1", .waitingToRetry, log: log),
             FakeStream("s2", .connected, log: log),
+            FakeStream("s3", .connected, log: log),
+        ]
+
+        _ = await recoverAndWait(coordinator, [hostGroup(streams)])
+
+        #expect(log.events == ["check s2", "check s3", "retry s1"])
+        #expect(streams[1].phase == .connected)
+        #expect(streams[2].phase == .connected)
+    }
+
+    // R7: with no connected stream to prove the master alive, a host whose streams are all
+    // reconnecting is renewed, and every stream on it is held first.
+    @Test func aHostWithOnlyReconnectingStreamsIsRenewed() async {
+        let log = EventLog()
+        let coordinator = RemoteTmuxWakeRecoveryCoordinator(environment: FakeEnvironment(log: log))
+        let streams = [
+            FakeStream("s1", .waitingToRetry, log: log),
+            FakeStream("s2", .retryInFlight, log: log),
         ]
 
         _ = await recoverAndWait(coordinator, [hostGroup(streams)])
 
         #expect(log.events == [
             "hold s1", "hold s2", "unlock-wait", "unlocked",
+            "renew user@a.wake.test", "resume s1", "resume s2",
+        ])
+    }
+
+    // Review F1, adversarial: a silent stream beside a stream in backoff still renews the host.
+    @Test func aSilentStreamBesideAStreamInBackoffRenewsTheHost() async {
+        let log = EventLog()
+        let coordinator = RemoteTmuxWakeRecoveryCoordinator(environment: FakeEnvironment(log: log))
+        let streams = [
+            FakeStream("s1", .waitingToRetry, log: log),
+            FakeStream("s2", .connected, answers: false, log: log),
+        ]
+
+        _ = await recoverAndWait(coordinator, [hostGroup(streams)])
+
+        #expect(log.events == [
+            "check s2", "hold s1", "hold s2", "unlock-wait", "unlocked",
             "renew user@a.wake.test", "resume s1", "resume s2",
         ])
     }
@@ -293,11 +337,13 @@ import Testing
         #expect(!log.events.contains { $0.hasSuffix(" attaching") })
     }
 
-    // Adversarial: a renewal that fails still releases the streams, so none is left frozen.
-    @Test func streamsAreReleasedWhenRenewalFails() async {
+    // R4, review F2: a renewal that fails keeps every stream held and retries the renewal with a
+    // growing wait. The streams are released together only once one master is confirmed, so they
+    // never race to create it and the user authenticates once.
+    @Test func aFailedRenewalKeepsStreamsHeldAndRetriesTheRenewal() async {
         let log = EventLog()
         let environment = FakeEnvironment(log: log)
-        environment.renewResult = false
+        environment.renewResults = [false, false, true]
         let coordinator = RemoteTmuxWakeRecoveryCoordinator(environment: environment)
         let streams = [
             FakeStream("s1", .connected, answers: false, log: log),
@@ -306,8 +352,54 @@ import Testing
 
         _ = await recoverAndWait(coordinator, [hostGroup(streams)])
 
+        #expect(log.events == [
+            "check s1", "hold s1", "hold s2", "unlock-wait", "unlocked",
+            "renew user@a.wake.test", "renew-wait 0",
+            "renew user@a.wake.test", "renew-wait 1",
+            "renew user@a.wake.test", "resume s1", "resume s2",
+        ])
         #expect(streams.allSatisfy { $0.phase == .retryInFlight })
-        #expect(log.events.suffix(2) == ["resume s1", "resume s2"])
+    }
+
+    // Review F2, adversarial: once no stream on the host is still held (the user closed them),
+    // the renewal stops retrying and releases nothing.
+    @Test func renewalRetriesStopWhenNoStreamIsStillHeld() async {
+        let log = EventLog()
+        let environment = FakeEnvironment(log: log)
+        environment.renewResult = false
+        let coordinator = RemoteTmuxWakeRecoveryCoordinator(environment: environment)
+        let streams = [
+            FakeStream("s1", .connected, answers: false, log: log),
+            FakeStream("s2", .connected, answers: false, log: log),
+        ]
+        environment.duringRenewalWait = { _ in
+            for stream in streams { stream.phase = .ended }
+        }
+
+        _ = await recoverAndWait(coordinator, [hostGroup(streams)])
+
+        #expect(log.events.filter { $0.hasPrefix("renew user") }.count == 1)
+        #expect(!log.events.contains { $0.hasPrefix("resume") })
+    }
+
+    // R10: with remote connections disabled by a managed-device policy, a wake does nothing.
+    @Test func nothingHappensOnWakeWhenRemoteConnectionsAreDisabled() async {
+        let log = EventLog()
+        let coordinator = RemoteTmuxWakeRecoveryCoordinator(
+            environment: FakeEnvironment(log: log),
+            remoteConnectionsAllowed: { false }
+        )
+        let streams = [
+            FakeStream("s1", .connected, answers: false, log: log),
+            FakeStream("s2", .waitingToRetry, log: log),
+        ]
+
+        let started = await recoverAndWait(coordinator, [hostGroup(streams)])
+
+        #expect(started == 0)
+        #expect(log.events.isEmpty)
+        #expect(streams[0].phase == .connected)
+        #expect(streams[1].phase == .waitingToRetry)
     }
 
     // Adversarial: hosts recover independently; a healthy host is not renewed because another is dead.

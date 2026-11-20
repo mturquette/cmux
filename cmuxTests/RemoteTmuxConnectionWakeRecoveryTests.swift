@@ -128,6 +128,31 @@ import Testing
         #expect(connection.connectionState == .connected)
     }
 
+    // Review F4: a held stream stays held past the retry that holding it scheduled. Holding goes
+    // through `beginReconnecting`, which schedules an attempt; the test reads that attempt's delay
+    // from the stream's own `reconnect-scheduled` event and waits past it, so it fails if the
+    // scheduled attempt can still fire while the stream is held.
+    @Test(.timeLimit(.minutes(1)))
+    func aHeldStreamStaysHeldPastItsScheduledRetry() async throws {
+        let client = try makeClient(.answers)
+        defer { client.remove() }
+        let connection = try await connectedAndDrained(client)
+        defer { connection.stop() }
+
+        #expect(connection.holdReconnectForWake())
+        let scheduled = try #require(
+            connection.snapshot().recentEvents.last { $0.hasPrefix("reconnect-scheduled") }
+        )
+        let delayText = try #require(scheduled.split(separator: "=").last)
+        let delay = try #require(Double(delayText))
+
+        try await ContinuousClock().sleep(for: .seconds(delay + 1))
+
+        #expect(connection.wakeStreamPhase == .heldForWake)
+        #expect(client.launchCount() == 1)
+        #expect(!connection.snapshot().recentEvents.contains("reconnect-attempt"))
+    }
+
     @Test(.timeLimit(.minutes(1)))
     func aHeldStreamReconnectsOnceWhenReleased() async throws {
         let client = try makeClient(.answers)
