@@ -59,6 +59,12 @@ extension RemoteTmuxControlConnection {
     /// key press in another terminal just before the user switched here can
     /// arrive up to about a second later. A real later use of the other client
     /// is reported again on its next key press, so ignoring one costs little.
+    ///
+    /// Two costs, both accepted: when two people type at once, one here and one
+    /// in another terminal, this mirror keeps the window while its person keeps
+    /// typing; and when the user types here and switches to another terminal
+    /// within the window only to read, that terminal stays at this mirror's
+    /// size until its first key press.
     static let lateRosterReportWindow: Duration = .milliseconds(1500)
 
     /// Subscribes to the session's client roster after an attach or reattach.
@@ -134,11 +140,25 @@ extension RemoteTmuxControlConnection {
         send("select-window")
     }
 
+    /// The mode a reconnect spawns with: the attach mode below once the stream
+    /// has reached control mode, otherwise the mode the connection was opened with.
+    var reconnectSpawnMode: RemoteTmuxControlAttachMode {
+        everReachedControlMode ? reconnectAttachMode : attachMode
+    }
+
     /// The attach mode for a reconnect: a mirror standing aside comes back with
     /// `ignore-size` already set, so another mirror never sees it as a fresh,
     /// unflagged client and stands aside for it by mistake.
+    ///
+    /// A transport that types its command into a line-limited terminal (et)
+    /// may not fit the longer flagged command for a very long session name; it
+    /// then reconnects with the plain attach, which the socket boundary already
+    /// checked, and the flag follows right after the attach.
     var reconnectAttachMode: RemoteTmuxControlAttachMode {
-        latestClientSizing.isStandingAside ? .attachIgnoringSize : .attach
+        guard latestClientSizing.isStandingAside,
+              transportProfile.commandLengthOverrun(sessionName: sessionName, mode: .attachIgnoringSize) == nil
+        else { return .attach }
+        return .attachIgnoringSize
     }
 
     /// tmux does not recompute window sizes when a client's flags change, so

@@ -1691,7 +1691,7 @@ final class RemoteTmuxControlConnection {
     private func attemptReconnectSpawn() {
         record("reconnect-attempt")
         do {
-            try spawnProcess(mode: everReachedControlMode ? reconnectAttachMode : attachMode)
+            try spawnProcess(mode: reconnectSpawnMode)
         } catch let error as RemoteTmuxError where error.refusesEveryRetry {
             // The next attempt would be refused the same way, so retrying would only hide it.
             record("reconnect-refused")

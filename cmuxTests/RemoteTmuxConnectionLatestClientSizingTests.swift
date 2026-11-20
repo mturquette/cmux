@@ -214,6 +214,8 @@ import Testing
         let aside = try standAside(reattachKeepingState(wire))
         defer { aside.connection.stop() }
         #expect(aside.connection.reconnectAttachMode == .attachIgnoringSize)
+        // The mode the reconnect spawn actually uses, once the stream has reached control mode.
+        #expect(aside.connection.reconnectSpawnMode == .attachIgnoringSize)
         #expect(RemoteTmuxControlAttachMode.attachIgnoringSize.tmuxArguments(sessionName: "work")
             == ["-CC", "attach-session", "-f", "ignore-size", "-t", "work"])
         aside.connection.beginReconnecting()
@@ -235,6 +237,26 @@ import Testing
         #expect(!commands.contains("select-window"))
     }
 
+    /// Review N1: et types its command into a line-limited pty. A session name
+    /// that fits the plain attach but not the flagged one must reconnect with
+    /// the plain attach, or every reconnect would be refused before it starts.
+    @Test func aLineLimitedTransportFallsBackToThePlainAttachForALongName() {
+        let profile = RemoteTmuxETTransportProfile(port: 2022)
+        let longest = String(repeating: "s", count: RemoteTmuxETTransportProfile.maxSessionNameBytes(mode: .attach))
+        #expect(profile.commandLengthOverrun(sessionName: longest, mode: .attach) == nil)
+        #expect(profile.commandLengthOverrun(sessionName: longest, mode: .attachIgnoringSize) != nil)
+        let long = RemoteTmuxControlConnection(
+            host: RemoteTmuxHost(destination: "user@et.test"), sessionName: longest, transportProfile: profile
+        )
+        long.latestClientSizing.isStandingAside = true
+        #expect(long.reconnectAttachMode == .attach)
+        let short = RemoteTmuxControlConnection(
+            host: RemoteTmuxHost(destination: "user@et.test"), sessionName: "work", transportProfile: profile
+        )
+        short.latestClientSizing.isStandingAside = true
+        #expect(short.reconnectAttachMode == .attachIgnoringSize)
+    }
+
     @Test func aReconnectWhileNotStandingAsideUsesThePlainAttach() {
         let wire = connectedWire(label: "latest-size-reconnect-plain")
         defer { wire.connection.stop() }
@@ -251,7 +273,8 @@ import Testing
         _ = try sentCommands(wire)
         let aside = try standAside(reattachKeepingState(wire))
         aside.connection.reassertWindowClaimIfLayoutDisagrees(windowId: 3, layoutColumns: 264, layoutRows: 46)
-        #expect(aside.connection.sentWindowSizes[3] != nil)
+        // Without the guard the repair spends a re-arm on this window and re-sends its claim.
+        #expect(aside.connection.windowClaimParityRearmsSpent[3] == nil)
         #expect(try sentCommands(aside).allSatisfy { !$0.contains("@3:") })
     }
 }
