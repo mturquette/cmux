@@ -96,8 +96,10 @@ final class RemoteTmuxControlConnection {
             switch connectionState {
             case .connected:
                 finishConnectionWaiters(connected: true)
+                finishReconnectOutcomeWaiters()
             case .ended:
                 finishConnectionWaiters(connected: false)
+                finishReconnectOutcomeWaiters()
                 // A connection that ends before publishing any window never had a mirror to
                 // offer; fail its readiness waiters rather than leaving them to time out.
                 resolveInitialTopology(ready: false)
@@ -288,6 +290,8 @@ final class RemoteTmuxControlConnection {
     var windowReorderVerificationGeneration: UInt64?
     var windowReorderVerifications: [UInt64: (Bool) -> Void] = [:]
     private var connectionWaiters: [UUID: (Bool) -> Void] = [:]
+    /// Wake recovery's waiters for a released stream's outcome (see `waitForReconnectOutcome()`).
+    var reconnectOutcomeWaiters: [UUID: (RemoteTmuxWakeStreamPhase) -> Void] = [:]
 
     /// Whether this connection ever delivered a usable initial topology.
     ///
@@ -1557,6 +1561,8 @@ final class RemoteTmuxControlConnection {
             record("\(reason)-auth-required-unhandled")
             awaitingInteractiveAuth = false
             scheduleReconnectAttempt()
+        } else {
+            finishReconnectOutcomeWaiters()
         }
     }
 
@@ -1663,6 +1669,15 @@ final class RemoteTmuxControlConnection {
         reconnectHeldForWake = false
         record("wake-resume")
         retryReconnectNow()
+    }
+
+    /// Parks a held stream for the login another stream on this host offered. The host's login
+    /// resumes every parked stream (`resumeAfterInteractiveAuth`), so this one needs no offer.
+    func handOverHeldStreamToLogin() {
+        guard reconnectHeldForWake else { return }
+        reconnectHeldForWake = false
+        awaitingInteractiveAuth = true
+        record("wake-hold-to-login")
     }
 
     /// Starts the next reconnect attempt now for a stream waiting between attempts.
