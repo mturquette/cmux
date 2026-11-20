@@ -14,8 +14,13 @@ import Foundation
 ///    the host is held: closing the shared master ends them all, so none may race a retry over it.
 /// 3. The coordinator waits until the screen is unlocked, renews the host's master, and releases
 ///    the held streams to reconnect over the fresh master, so the user authenticates at most once
-///    per host. A renewal that fails (the host is unreachable) is retried with a growing wait while
-///    the streams stay held, until it succeeds or none of them is held any more.
+///    per host. A renewal that finds the host unreachable is retried with a growing wait while the
+///    streams stay held, until it succeeds or none of them is held any more.
+/// 4. A renewal that fails for any other reason (the host needs a password or MFA, the user
+///    dismissed a Touch ID prompt, the host key changed) is not retried, because the same
+///    non-interactive open cannot succeed. One held stream is released at a time, into its own
+///    login and end handling. When it connects, the others follow it over its master; when it parks
+///    for a login, the others park with it, so the host's one login resumes them all.
 ///
 /// Owned by ``RemoteTmuxController``. One recovery runs per host; a wake that arrives while that
 /// host is still recovering starts nothing more for it.
@@ -95,19 +100,55 @@ final class RemoteTmuxWakeRecoveryCoordinator {
         }
         guard !held.isEmpty else { return }
         await environment.waitForScreenUnlock()
-        // Only one renewal, never the streams, creates the new master. A failed renewal keeps
-        // every stream held and is retried with a growing wait, so once the host is reachable
-        // again exactly one master is opened and the user authenticates once. Released streams
-        // would each race to create the master (#6732), and each loser would log in on its own.
+        // Only one renewal, never the streams, creates the new master. A renewal that finds the
+        // host unreachable keeps every stream held and is retried with a growing wait, so once the
+        // host is back exactly one master is opened and the user authenticates once. Released
+        // streams would each race to create the master (#6732), and each loser would log in on its
+        // own.
         var attempt = 0
-        while await environment.renewSharedConnection(for: group.host) != .renewed {
-            await environment.waitBeforeRenewalRetry(attempt: attempt)
-            attempt += 1
-            // The user may close every held mirror while the host is unreachable.
-            guard held.contains(where: { $0.wakeStreamPhase == .heldForWake }) else { return }
+        while true {
+            switch await environment.renewSharedConnection(for: group.host) {
+            case .renewed:
+                for stream in held {
+                    stream.resumeReconnectAfterWake()
+                }
+                return
+            case .failed:
+                await releaseOneStreamAtATime(held)
+                return
+            case .hostUnreachable:
+                await environment.waitBeforeRenewalRetry(attempt: attempt)
+                attempt += 1
+                // The user may close every held mirror while the host is unreachable.
+                guard held.contains(where: { $0.wakeStreamPhase == .heldForWake }) else { return }
+            }
         }
-        for stream in held {
-            stream.resumeReconnectAfterWake()
+    }
+
+    /// Hands the held streams to their own reconnect handling one at a time, after a renewal that
+    /// a retry cannot fix.
+    ///
+    /// The lead stream's reconnect reaches the existing paths: a host that needs the user parks it
+    /// and offers one login, a gone session ends it. Its outcome decides the rest. When it connects,
+    /// its master is open and the others ride it. When it parks for a login, the others park too,
+    /// and the host's login resumes every parked stream. When it ends, the next held stream leads.
+    /// So at most one stream at a time can ask the user to authenticate.
+    private func releaseOneStreamAtATime(_ held: [any RemoteTmuxWakeRecoverableStream]) async {
+        var waiting = held
+        while let lead = waiting.first {
+            waiting.removeFirst()
+            guard lead.wakeStreamPhase == .heldForWake else { continue }
+            lead.resumeReconnectAfterWake()
+            switch await lead.waitForReconnectOutcome() {
+            case .waitingForLogin:
+                for stream in waiting { stream.handOverHeldStreamToLogin() }
+                return
+            case .ended:
+                continue
+            default:
+                for stream in waiting { stream.resumeReconnectAfterWake() }
+                return
+            }
         }
     }
 

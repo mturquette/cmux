@@ -232,30 +232,43 @@ actor RemoteTmuxSSHTransport {
     /// to finish and never joined. Checking for it and installing this task is one synchronous
     /// actor step, so a ``ensureMasterReady()`` caller that arrives afterwards joins the renewal
     /// and gets the fresh master's result.
-    func closeAndReopenMaster() async -> Bool {
+    ///
+    /// - Returns: whether the fresh master is running, and the open's stderr, which says why
+    ///   when it is not.
+    func closeAndReopenMaster() async -> (isRunning: Bool, openStderr: String) {
         while let earlier = readinessTask {
             _ = try? await earlier.value
             if readinessTask == earlier { break }
         }
-        let task = Task { () async throws -> Bool in
+        let renewal = Task { () async throws -> (isRunning: Bool, openStderr: String) in
             await self.shutdownMaster()
-            return try await self.performMasterReady()
+            return try await self.openMasterIfNeeded()
         }
+        // Joiners only need to know whether a master is running.
+        let task = Task { try await renewal.value.isRunning }
         readinessTask = task
         defer { if readinessTask == task { readinessTask = nil } }
-        return (try? await task.value) ?? false
+        return (try? await renewal.value) ?? (false, "")
     }
 
     /// The actual warmup, run exactly once per ``readinessTask`` (see
     /// ``ensureMasterReady()`` for the single-flight + readiness rationale).
     private func performMasterReady() async throws -> Bool {
+        try await openMasterIfNeeded().isRunning
+    }
+
+    /// Opens the shared master unless one is running, then confirms it.
+    ///
+    /// - Returns: whether a master is running afterwards, and the open's stderr (empty when no
+    ///   open was needed or it printed nothing).
+    private func openMasterIfNeeded() async throws -> (isRunning: Bool, openStderr: String) {
         try? host.ensureControlSocketDirectory()
-        if try await masterIsRunning() { return true }
+        if try await masterIsRunning() { return (true, "") }
         // Warm the shared master once, then confirm. The open's exit code is not
         // trusted (a non-multiplexed fallback can make `run` exit 0 with no live
         // master — see the doc comment); the post-open `ssh -O check` is authoritative.
-        _ = try? await run(["true"])
-        return try await masterIsRunning()
+        let open = try? await run(["true"])
+        return (try await masterIsRunning(), open?.stderr ?? "")
     }
 
     /// Whether the shared ControlMaster is live and accepting sessions, via the
