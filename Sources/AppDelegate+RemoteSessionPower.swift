@@ -13,6 +13,7 @@ extension AppDelegate {
         // Mac slept must not be pre-empted by the wake re-arm; the enforcement
         // observer disconnects these workspaces on its next re-evaluation.
         guard ManagedRemoteConnectionsPolicy.isEnabled else { return }
+        remoteTmuxController.recoverMirrorsAfterSystemWake()
         forEachRemoteWorkspace { workspace in
             workspace.rearmRemoteSessionAfterSystemWake()
         }

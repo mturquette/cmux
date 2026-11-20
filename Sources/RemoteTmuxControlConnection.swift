@@ -1519,14 +1519,46 @@ final class RemoteTmuxControlConnection {
         }
     }
 
+    /// Tears down the stream's process and keeps it reconnecting with nothing scheduled, so wake
+    /// recovery decides when the next attempt runs (after the host's master has been renewed).
+    ///
+    /// The generation bump in `teardownProcessHandles` makes the old process's exit a no-op, and
+    /// nothing else schedules a retry for a stream with no process, so the stream stays held
+    /// until ``resumeReconnectAfterWake()`` or ``stop()``.
     @discardableResult
     func holdReconnectForWake() -> Bool {
-        false
+        switch wakeStreamPhase {
+        case .connected:
+            beginReconnecting()
+        case .waitingToRetry, .retryInFlight:
+            teardownProcessHandles()
+        case .attaching, .waitingForLogin, .heldForWake, .ended:
+            return false
+        }
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        reconnectHeldForWake = true
+        record("wake-hold")
+        return true
     }
 
-    func resumeReconnectAfterWake() {}
+    /// Releases a held stream with an immediate attempt at the base of the backoff.
+    func resumeReconnectAfterWake() {
+        guard reconnectHeldForWake else { return }
+        reconnectHeldForWake = false
+        record("wake-resume")
+        retryReconnectNow()
+    }
 
-    func retryReconnectNow() {}
+    /// Starts the next reconnect attempt now for a stream waiting between attempts.
+    func retryReconnectNow() {
+        guard wakeStreamPhase == .waitingToRetry else { return }
+        record("retry-now")
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        reconnectAttemptCount = 0
+        attemptReconnectSpawn()
+    }
 
     /// Schedules the next reconnect attempt after a capped exponential backoff.
     private func scheduleReconnectAttempt() {
