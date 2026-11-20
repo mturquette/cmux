@@ -333,6 +333,9 @@ final class RemoteTmuxControlConnection {
     /// deliberately parked (frozen, not ended) until ``resumeAfterInteractiveAuth()``
     /// or ``stop()``.
     private(set) var awaitingInteractiveAuth = false
+    /// Set while wake recovery holds this stream's retries until the host's shared ssh
+    /// connection has been renewed. No retry is scheduled while this is true.
+    private(set) var reconnectHeldForWake = false
     /// stderr text captured for the in-flight spawn, inspected when a reconnect
     /// attempt's process exits to tell "session genuinely gone" from "host still
     /// unreachable". Reset at the start of each spawn.
@@ -1500,6 +1503,30 @@ final class RemoteTmuxControlConnection {
         reconnectAttemptCount = 0
         scheduleReconnectAttempt()
     }
+
+    // MARK: - Wake recovery hooks (see RemoteTmuxWakeRecoveryCoordinator)
+
+    /// Where this stream stands for wake recovery.
+    var wakeStreamPhase: RemoteTmuxWakeStreamPhase {
+        switch connectionState {
+        case .ended: return .ended
+        case .connecting: return .attaching
+        case .connected: return attachBlockDrained ? .connected : .attaching
+        case .reconnecting:
+            if awaitingInteractiveAuth { return .waitingForLogin }
+            if reconnectHeldForWake { return .heldForWake }
+            return process == nil ? .waitingToRetry : .retryInFlight
+        }
+    }
+
+    @discardableResult
+    func holdReconnectForWake() -> Bool {
+        false
+    }
+
+    func resumeReconnectAfterWake() {}
+
+    func retryReconnectNow() {}
 
     /// Schedules the next reconnect attempt after a capped exponential backoff.
     private func scheduleReconnectAttempt() {
