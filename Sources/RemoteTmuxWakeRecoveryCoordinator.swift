@@ -12,9 +12,10 @@ import Foundation
 ///    alive: a stream waiting out its backoff retries now over it, and nothing is renewed.
 /// 2. If a stream was silent, or no stream is connected and one is reconnecting, every stream on
 ///    the host is held: closing the shared master ends them all, so none may race a retry over it.
-/// 3. The coordinator waits until the screen is unlocked, renews the host's master once, and
-///    releases the held streams to reconnect over the fresh master, so the user authenticates at
-///    most once per host.
+/// 3. The coordinator waits until the screen is unlocked, renews the host's master, and releases
+///    the held streams to reconnect over the fresh master, so the user authenticates at most once
+///    per host. A renewal that fails (the host is unreachable) is retried with a growing wait while
+///    the streams stay held, until it succeeds or none of them is held any more.
 ///
 /// Owned by ``RemoteTmuxController``. One recovery runs per host; a wake that arrives while that
 /// host is still recovering starts nothing more for it.
@@ -88,9 +89,17 @@ final class RemoteTmuxWakeRecoveryCoordinator {
         }
         guard !held.isEmpty else { return }
         await environment.waitForScreenUnlock()
-        // Released whatever the renewal reports: a stream whose attempt then fails keeps its own
-        // backoff, which is better than leaving it frozen.
-        _ = await environment.renewSharedConnection(for: group.host)
+        // Only one renewal, never the streams, creates the new master. A failed renewal keeps
+        // every stream held and is retried with a growing wait, so once the host is reachable
+        // again exactly one master is opened and the user authenticates once. Released streams
+        // would each race to create the master (#6732), and each loser would log in on its own.
+        var attempt = 0
+        while !(await environment.renewSharedConnection(for: group.host)) {
+            await environment.waitBeforeRenewalRetry(attempt: attempt)
+            attempt += 1
+            // The user may close every held mirror while the host is unreachable.
+            guard held.contains(where: { $0.wakeStreamPhase == .heldForWake }) else { return }
+        }
         for stream in held {
             stream.resumeReconnectAfterWake()
         }

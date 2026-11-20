@@ -22,5 +22,14 @@ final class RemoteTmuxLiveWakeRecoveryEnvironment: RemoteTmuxWakeRecoveryEnviron
         await transportRegistry.transport(for: host).renewSharedMaster()
     }
 
-    func waitBeforeRenewalRetry(attempt: Int) async {}
+    /// The same capped exponential backoff a reconnecting stream uses: 1, 2, 4 and 8 seconds, then
+    /// 10 seconds per retry. A bounded backoff timer, not a wait for an event: the event (the host
+    /// becoming reachable) has no notification to await, so the renewal itself is the probe.
+    func waitBeforeRenewalRetry(attempt: Int) async {
+        let seconds = min(Self.renewalRetryMaxSeconds, Self.renewalRetryBaseSeconds * pow(2, Double(attempt)))
+        try? await ContinuousClock().sleep(for: .seconds(seconds))
+    }
+
+    private static let renewalRetryBaseSeconds: Double = 1
+    private static let renewalRetryMaxSeconds: Double = 10
 }
