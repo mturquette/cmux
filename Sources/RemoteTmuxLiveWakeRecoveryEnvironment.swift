@@ -21,4 +21,6 @@ final class RemoteTmuxLiveWakeRecoveryEnvironment: RemoteTmuxWakeRecoveryEnviron
     func renewSharedConnection(for host: RemoteTmuxHost) async -> Bool {
         await transportRegistry.transport(for: host).renewSharedMaster()
     }
+
+    func waitBeforeRenewalRetry(attempt: Int) async {}
 }

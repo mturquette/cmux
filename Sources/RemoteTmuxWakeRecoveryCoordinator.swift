@@ -28,7 +28,11 @@ final class RemoteTmuxWakeRecoveryCoordinator {
     ///   - environment: the lock-screen and shared-connection steps.
     ///   - checkTimeoutSeconds: how long a connected stream has to answer its check. Five
     ///     seconds leaves room for a slow link while staying well under ssh's own detection.
-    init(environment: any RemoteTmuxWakeRecoveryEnvironment, checkTimeoutSeconds: Double = 5) {
+    init(
+        environment: any RemoteTmuxWakeRecoveryEnvironment,
+        checkTimeoutSeconds: Double = 5,
+        remoteConnectionsAllowed: @escaping @MainActor () -> Bool = { true }
+    ) {
         self.environment = environment
         self.checkTimeoutSeconds = checkTimeoutSeconds
     }
