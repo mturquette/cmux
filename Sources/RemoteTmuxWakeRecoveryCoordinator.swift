@@ -99,7 +99,6 @@ final class RemoteTmuxWakeRecoveryCoordinator {
             held.append(stream)
         }
         guard !held.isEmpty else { return }
-        await environment.waitForScreenUnlock()
         // Only one renewal, never the streams, creates the new master. A renewal that finds the
         // host unreachable keeps every stream held and is retried with a growing wait, so once the
         // host is back exactly one master is opened and the user authenticates once. Released
@@ -107,6 +106,9 @@ final class RemoteTmuxWakeRecoveryCoordinator {
         // own.
         var attempt = 0
         while true {
+            // Before every attempt, retries included: the user may have locked the Mac while the
+            // host was unreachable, and a renewal must never ask for Touch ID on the lock screen.
+            await environment.waitForScreenUnlock()
             switch await environment.renewSharedConnection(for: group.host) {
             case .renewed:
                 for stream in held {
