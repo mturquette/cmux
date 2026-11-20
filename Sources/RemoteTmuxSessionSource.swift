@@ -177,6 +177,10 @@ protocol RemoteTmuxSessionSource: AnyObject {
     @discardableResult func sendWindowReorder(_ commands: [String], verification: ((Bool) -> Void)?) -> Bool
     /// Forwards typed input to a pane.
     @discardableResult func sendKeys(paneId: Int, data: Data) -> Bool
+    /// Reports direct user input (keys, text, paste, a click, or switching to cmux)
+    /// to a pane of tmux window `windowId`, so a mirror that stood aside for another
+    /// tmux client takes the session back. Never called for programmatic sends.
+    func noteUserInputForSizing(windowId: Int?)
     /// Forwards a named key (Enter, Escape, an arrow…) to a pane.
     ///
     /// Separate from ``sendKeys(paneId:data:)`` because tmux names these rather than taking

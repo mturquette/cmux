@@ -370,6 +370,12 @@ public final class TerminalSurface: Identifiable, ObservableObject {
     }
     /// Routes accepted explicit user input to the surface's current panel owner.
     @MainActor public var onExplicitInput: (@MainActor () -> Void)?
+    /// Called for input the user gave this surface directly through AppKit: a
+    /// key press, committed IME text, a paste command, a click, or switching
+    /// to the app while this surface has focus. Unlike
+    /// ``onExplicitInput``, socket and CLI sends never call it, so an owner can
+    /// treat it as proof that a person is using this surface.
+    @MainActor public var onDirectUserInput: (@MainActor () -> Void)?
     /// Set while another participant disconnected this pane's view of a
     /// shared terminal (docs/shared-terminal-sizing.md). The pane drops
     /// keyboard and text input until the user reattaches.

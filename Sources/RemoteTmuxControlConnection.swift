@@ -188,6 +188,8 @@ final class RemoteTmuxControlConnection {
     var isSharedViewStream = false
     /// Whether the stream's order digest (see ``subscribeSessionDigest()``) is subscribed.
     var sessionDigestSubscribed = false
+    /// Latest-client sizing; see `RemoteTmuxControlConnection+LatestClientSizing.swift`.
+    var latestClientSizing = RemoteTmuxLatestClientSizingState()
     var newWindowCompletions: [UUID: (Int?) -> Void] = [:]
     var newPaneCompletions: [UUID: (Int?) -> Void] = [:]
     /// Completions for ``sendTracked(_:completion:)`` blocks, keyed by the
@@ -1584,6 +1586,7 @@ final class RemoteTmuxControlConnection {
         // `subscribeSessionDigest()` again, and it returns early unless this flag is
         // cleared here — leaving the stream blind to session changes and window reorders.
         sessionDigestSubscribed = false
+        latestClientSizing.subscribed = false
         pendingPostAttachAction = nil
         teardownProcessHandles()
         // An attach that held is a working connection, whatever took it down, so the next retry
@@ -1688,7 +1691,7 @@ final class RemoteTmuxControlConnection {
     private func attemptReconnectSpawn() {
         record("reconnect-attempt")
         do {
-            try spawnProcess(mode: everReachedControlMode ? .attach : attachMode)
+            try spawnProcess(mode: reconnectSpawnMode)
         } catch let error as RemoteTmuxError where error.refusesEveryRetry {
             // The next attempt would be refused the same way, so retrying would only hide it.
             record("reconnect-refused")
@@ -1963,6 +1966,7 @@ final class RemoteTmuxControlConnection {
                 // coordinator's in-flight reconcile guard).
                 observers.notifyTopologyChanged()
             } else if name == Self.windowOrderSubscriptionName { handleWindowOrderDigest(value) }
+            else if name == Self.clientRosterSubscriptionName { handleClientRoster(value) }
         case let .commandResult(_, lines, isError):
             // The first block on each control stream is the attach command's own —
             // consume it explicitly so it can never pop a queued command's slot off

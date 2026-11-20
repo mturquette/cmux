@@ -3,15 +3,6 @@ import CmuxTerminal
 import CmuxTerminalCore
 
 extension GhosttyNSView {
-    func recordDirectAgentHibernationTerminalInput() {
-        guard let terminalSurface else { return }
-        GhosttyApp.terminalSurfaceRuntimeDependencies
-            .hibernationRecorder.recordTerminalInput(
-                workspaceId: terminalSurface.tabId,
-                panelId: terminalSurface.id
-            )
-    }
-
     @IBAction func paste(_ sender: Any?) {
         guard prepareSurfaceForPaste(reason: "paste.missingSurface") else {
             return

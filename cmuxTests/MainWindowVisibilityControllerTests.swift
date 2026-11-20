@@ -476,6 +476,63 @@ final class MainWindowVisibilityControllerTests: XCTestCase {
         XCTAssertEqual(activationCount, 0)
     }
 
+    /// Latest-client sizing (review F3): an activation cmux asks for itself
+    /// must be recognisable afterwards, so it does not count as the user
+    /// switching to cmux; a Dock click (reopen) or the menu bar must not be.
+    func testSelfInitiatedActivationIsRecordedAndUserActivationIsNot() {
+        let window = makeWindow()
+        defer { window.orderOut(nil) }
+        let controller = MainWindowVisibilityController(
+            dependencies: .init(
+                isActivationSuppressed: { false },
+                setActiveMainWindow: { _ in },
+                isApplicationActive: { false },
+                activateRunningApplication: { _ in },
+                windowOperations: makeWindowOperations()
+            )
+        )
+        XCTAssertFalse(controller.requestedOwnActivation(within: .seconds(1)))
+        _ = controller.focus(window, reason: .applicationReopen)
+        _ = controller.focus(window, reason: .menuBar)
+        XCTAssertFalse(controller.requestedOwnActivation(within: .seconds(1)))
+        _ = controller.focus(window, reason: .socketActivate)
+        XCTAssertTrue(controller.requestedOwnActivation(within: .seconds(1)))
+        XCTAssertFalse(controller.requestedOwnActivation(within: .zero))
+    }
+
+    /// The feedback socket command activates cmux through `.feedback`; that is
+    /// cmux's own request, not the user switching to it (second review).
+    func testFeedbackActivationIsSelfInitiated() {
+        let window = makeWindow()
+        defer { window.orderOut(nil) }
+        let controller = MainWindowVisibilityController(
+            dependencies: .init(
+                isActivationSuppressed: { false },
+                setActiveMainWindow: { _ in },
+                isApplicationActive: { false },
+                activateRunningApplication: { _ in },
+                windowOperations: makeWindowOperations()
+            )
+        )
+        _ = controller.focus(window, reason: .feedback)
+        XCTAssertTrue(controller.requestedOwnActivation(within: .seconds(1)))
+    }
+
+    func testFocusWithoutActivationIsNotRecorded() {
+        let window = makeWindow()
+        defer { window.orderOut(nil) }
+        let controller = MainWindowVisibilityController(
+            dependencies: .init(
+                isActivationSuppressed: { false },
+                setActiveMainWindow: { _ in },
+                activateRunningApplication: { _ in },
+                windowOperations: makeWindowOperations()
+            )
+        )
+        _ = controller.focus(window, reason: .socketActivate, activation: .none)
+        XCTAssertFalse(controller.requestedOwnActivation(within: .seconds(1)))
+    }
+
     private func makeWindow() -> NSWindow {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 120, height: 80),

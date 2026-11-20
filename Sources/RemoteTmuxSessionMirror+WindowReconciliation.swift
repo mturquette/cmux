@@ -51,11 +51,18 @@ extension RemoteTmuxSessionMirror {
                       let onInput = self.makePaneInputHandler(toPane: tmuxPaneId) else {
                     return nil
                 }
-                return workspace?.makeRemoteTmuxPanePanel(
+                let panel = workspace?.makeRemoteTmuxPanePanel(
                     onInput: onInput,
                     keyNameResolver: { RemoteTmuxKeyName(inputEvent: $0)?.value },
                     allowsRemoteClipboardWrites: workspace?.allowsRemoteTmuxClipboardWrites ?? false
                 )
+                // The user typing, pasting or clicking here, or switching to cmux with
+                // this pane focused, is what lets this mirror size the session
+                // again after another tmux client was used.
+                panel?.surface.onDirectUserInput = { [weak self] in
+                    self?.connection.noteUserInputForSizing(windowId: windowId)
+                }
+                return panel
             }
         )
         mirror.onClosePaneRequest = { [weak workspace, weak mirror] tmuxPaneId in
