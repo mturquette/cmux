@@ -34,7 +34,7 @@ final class RemoteTmuxController {
     /// Live `tmux -CC` control connections keyed by `connectionHash\u{1}session`
     /// (see ``connectionKey(host:sessionName:)``), so repeated attach requests for
     /// the same endpoint+session reuse the existing connection.
-    private var connectionsByHostSession: [String: RemoteTmuxControlConnection] = [:]
+    private(set) var connectionsByHostSession: [String: RemoteTmuxControlConnection] = [:]
     private var connectionObserverTokensByHostSession: [String: RemoteTmuxControlConnection.ObserverToken] = [:]
     /// Per-session channels scoping a shared multiplexed view connection down to a
     /// single tmux session, keyed like ``connectionsByHostSession``. Non-private so
@@ -51,6 +51,13 @@ final class RemoteTmuxController {
     /// (Declared here rather than in the multiplexer extension because extensions cannot hold
     /// stored properties; the ledger type stays next to its users.)
     var hostAuth = HostAuthLedger()
+
+    /// Recovers mirrored streams after the Mac wakes (see ``recoverMirrorsAfterSystemWake()``).
+    lazy var wakeRecovery = RemoteTmuxWakeRecoveryCoordinator(
+        environment: RemoteTmuxLiveWakeRecoveryEnvironment(
+            transportRegistry: transportRegistry, screenUnlockGate: RemoteTmuxScreenUnlockGate()
+        )
+    )
 
     /// How long a shared connection's attach may stay quiet in each phase before it is
     /// called stalled. Given to each new view; a test shortens these.
