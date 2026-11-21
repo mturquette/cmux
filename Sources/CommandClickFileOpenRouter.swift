@@ -40,14 +40,22 @@ enum CommandClickFileOpenRouter {
         return workspace.openOrFocusFilePreviewSplit(from: sourcePanelId, filePath: filePath) != nil
     }
 
-    /// Resolve the working directory for a terminal surface, preferring the
-    /// per-panel directory, then the panel's requested working directory,
-    /// then the workspace-level directory.
+    /// Resolve the working directory for a terminal surface: a tmux mirror pane's own
+    /// directory as tmux reports it, then the per-panel directory, then the panel's
+    /// requested working directory, then the workspace-level directory.
     @MainActor
     static func resolveWorkingDirectory(
         workspace: Workspace,
         surfaceId: UUID
     ) -> String? {
+        // A mirror pane's directory lives with its window mirror; the per-panel entry
+        // belongs to the outer tab and follows tmux's active pane.
+        if let location = workspace.remoteTmuxControlPane(surfaceID: surfaceId),
+           let dir = location.windowMirror?.cwdByPaneId[location.pane.tmuxPaneID]?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !dir.isEmpty {
+            return dir
+        }
         if let dir = workspace.panelDirectories[surfaceId]?
             .trimmingCharacters(in: .whitespacesAndNewlines),
            !dir.isEmpty {
