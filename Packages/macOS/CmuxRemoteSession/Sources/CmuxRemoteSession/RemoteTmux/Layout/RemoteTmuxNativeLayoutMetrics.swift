@@ -48,13 +48,16 @@ public struct RemoteTmuxNativeLayoutMetrics: Equatable, Sendable {
     /// the surface cannot paint (a scaled size landing in [B−0.5, B) would
     /// pass a rounded model while wrapping on the real surface). This is the
     /// ONE source for points→cells: the sizing tests and the DEBUG
-    /// chrome-parity check both call it, so the two cannot drift.
+    /// chrome-parity check both call it, so the two cannot drift. A legacy scroller's
+    /// gutter (`scrollerGutterPt`) comes off the width before it turns into pixels, as the
+    /// scroll view takes it from the surface.
     public static func renderedCells(
         outer: CGSize,
         tabBarHeight: CGFloat,
         scale: CGFloat,
         surfacePadPx: (width: Int, height: Int),
-        cellPx: (width: Int, height: Int)
+        cellPx: (width: Int, height: Int),
+        scrollerGutterPt: CGFloat = 0
     ) -> (columns: Int, rows: Int) {
         let widthPx = Int((outer.width * scale).rounded(.down))
         let surfaceHeightPx = Int(
