@@ -109,7 +109,9 @@ final class RemoteTmuxControlConnection {
         }
     }
     private(set) var sessionId: Int?
-    var windowsByID: [Int: RemoteTmuxWindow] = [:]
+    var windowsByID: [Int: RemoteTmuxWindow] = [:] {
+        didSet { forgetChangedShortfall() }
+    }
     var windowOrder: [Int] = []
     var publishedWindowIdByPane: [Int: Int] = [:]
     /// Pane identities whose ownership is temporarily undecidable after their
