@@ -685,7 +685,8 @@ extension RemoteTmuxWindowMirror {
                     tabBarHeight: metrics.tabBarHeight,
                     scale: geometry.scale,
                     surfacePadPx: (width: geometry.surfacePadWidthPx, height: geometry.surfacePadHeightPx),
-                    cellPx: (width: geometry.cellWidthPx, height: geometry.cellHeightPx)
+                    cellPx: (width: geometry.cellWidthPx, height: geometry.cellHeightPx),
+                    scrollerGutterPt: geometry.scrollerGutterWidthPt
                 )
                 if sample.columns != expected.columns || sample.rows != expected.rows {
                     cmuxDebugLog(
