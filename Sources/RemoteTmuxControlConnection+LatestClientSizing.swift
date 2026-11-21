@@ -13,6 +13,16 @@ struct RemoteTmuxLatestClientSizingState {
     /// When the user last gave this mirror direct input (see
     /// ``RemoteTmuxControlConnection/noteUserInputForSizing(windowId:)``).
     var lastDirectUserInputAt: ContinuousClock.Instant?
+    /// The window and the tmux size of the last shortfall a key press took back, so the
+    /// same shortfall is taken back once, not on every key.
+    var lastShortfallTakenBack: RemoteTmuxWindowShortfall?
+}
+
+/// A window tmux holds smaller than this mirror's claim for it.
+struct RemoteTmuxWindowShortfall: Equatable {
+    let windowId: Int
+    let columns: Int
+    let rows: Int
 }
 
 /// Keeps `window-size latest` meaningful while a mirror shares a session with
@@ -129,7 +139,11 @@ extension RemoteTmuxControlConnection {
     /// - Parameter windowId: The tmux window of the pane that got the input.
     func noteUserInputForSizing(windowId: Int?) {
         latestClientSizing.lastDirectUserInputAt = .now
-        guard latestClientSizing.isStandingAside, connectionState == .connected else { return }
+        guard connectionState == .connected else { return }
+        guard latestClientSizing.isStandingAside else {
+            takeBackShortfallIfAny(windowId: windowId)
+            return
+        }
         latestClientSizing.isStandingAside = false
         if let windowId, let current = latestClientSizing.roster?.currentWindowId, windowId != current {
             note("latest-size take-back @\(windowId); only tmux's current window @\(current) follows this mirror")
@@ -137,6 +151,30 @@ extension RemoteTmuxControlConnection {
             note("latest-size take-back")
         }
         send("refresh-client -f '!ignore-size'")
+        send("select-window")
+    }
+
+    /// Takes the window back when tmux holds it below this mirror's claim although the
+    /// mirror never stood aside.
+    ///
+    /// Under `window-size latest`, a window smaller than this mirror's claim means another
+    /// client is tmux's latest one: the mirror missed the roster report that would have made
+    /// it stand aside, or ignored it as late. Without this, the user's typing here never makes
+    /// the mirror latest again, and a split window keeps the other client's height, leaving
+    /// part of the cmux pane blank. A targetless `select-window` makes this client latest, as
+    /// in ``noteUserInputForSizing(windowId:)``. Sent once per shortfall, so a window tmux
+    /// cannot grow for another reason costs one command, not one per key.
+    private func takeBackShortfallIfAny(windowId: Int?) {
+        guard let windowId,
+              latestClientSizing.roster?.followsLatestClient == true,
+              let claim = lastWindowSizes[windowId],
+              let window = windowsByID[windowId],
+              window.width < claim.0 || window.height < claim.1
+        else { return }
+        let shortfall = RemoteTmuxWindowShortfall(windowId: windowId, columns: window.width, rows: window.height)
+        guard latestClientSizing.lastShortfallTakenBack != shortfall else { return }
+        latestClientSizing.lastShortfallTakenBack = shortfall
+        note("latest-size take-back-shortfall @\(windowId) tmux=\(window.width)x\(window.height) claim=\(claim.0)x\(claim.1)")
         send("select-window")
     }
 
