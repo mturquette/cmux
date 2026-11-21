@@ -1,3 +1,4 @@
+import Bonsplit
 import Foundation
 import Testing
 
@@ -13,6 +14,7 @@ import Testing
 /// machine, and its links are still never opened against this Mac's files.
 @MainActor
 @Suite(.serialized) struct RemoteTmuxLocalMirrorLinkTests {
+    @MainActor
     private struct Mirrored {
         let workspace: Workspace
         let outerPanelID: UUID
