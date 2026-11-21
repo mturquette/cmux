@@ -655,6 +655,7 @@ class GhosttyApp {
         startUptime: ProcessInfo.processInfo.systemUptime
     )
     private var appObservers: [NSObjectProtocol] = []
+    private var appActivationObserver: TerminalAppActivationObserver?
     @MainActor private lazy var terminalBellService = TerminalBellService()
     private var backgroundEventCounter: UInt64 = 0
     private var defaultBackgroundUpdateScope: GhosttyDefaultBackgroundUpdateScope = .unscoped
@@ -1099,14 +1100,18 @@ class GhosttyApp {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            // Switching to cmux counts as using the focused terminal, when a
-            // person caused it (see GhosttyNSView.noteAppActivationIfUserCaused).
-            MainActor.assumeIsolated {
-                (NSApp.keyWindow?.firstResponder as? GhosttyNSView)?.noteAppActivationIfUserCaused()
-            }
             guard let app = self?.app else { return }
             ghostty_app_set_focus(app, true)
         })
+        // Switching to cmux counts as using the focused terminal, when a person caused it.
+        appActivationObserver = MainActor.assumeIsolated {
+            TerminalAppActivationObserver(center: .default, environment: .init(
+                keyWindow: { NSApp.keyWindow },
+                activationIsUserCaused: { GhosttyNSView.appActivationIsUserCaused() },
+                now: { ProcessInfo.processInfo.systemUptime },
+                noteUse: { ($0.firstResponder as? GhosttyNSView)?.noteAppActivation() ?? false }
+            ))
+        }
 
         appObservers.append(NotificationCenter.default.addObserver(
             forName: NSApplication.didResignActiveNotification,

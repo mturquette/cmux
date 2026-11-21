@@ -23,30 +23,37 @@ extension GhosttyNSView {
         terminalSurface?.onDirectUserInput?()
     }
 
-    /// Reports the app becoming active as direct input to this focused surface,
-    /// but only when the event AppKit is handling shows a person caused it
-    /// (a click, a key press, or the window server's Dock or Command-Tab
-    /// activation).
-    func noteAppActivationIfUserCaused() {
-        guard let terminalSurface else { return }
+    /// Counts the app becoming active as direct input to this focused surface.
+    /// ``TerminalAppActivationObserver`` calls it only for an activation a person caused.
+    /// - Returns: whether this view has a surface to count it for.
+    func noteAppActivation() -> Bool {
+        guard let terminalSurface else { return false }
+        #if DEBUG
+        cmuxDebugLog("terminal.activation counted surface=\(terminalSurface.id.uuidString.prefix(5))")
+        #endif
+        terminalSurface.onDirectUserInput?()
+        return true
+    }
+
+    /// Whether the app activation AppKit is handling was caused by a person (a click, a key
+    /// press, or the window server's Dock or Command-Tab activation) and not requested by cmux.
+    static func appActivationIsUserCaused() -> Bool {
         let event = NSApp.currentEvent
         let now = ProcessInfo.processInfo.systemUptime
         let judged = TerminalUserActivation(event: event, now: now)
-        #if DEBUG
-        let subtype = event?.type == .appKitDefined ? "\(event?.subtype.rawValue ?? -1)" : "-"
-        let age = event.map { String(format: "%.3f", now - $0.timestamp) } ?? "-"
-        cmuxDebugLog(
-            "terminal.activation surface=\(terminalSurface.id.uuidString.prefix(5)) " +
-            "userCaused=\(judged.isUserCaused) type=\(event.map { "\($0.type.rawValue)" } ?? "nil") " +
-            "subtype=\(subtype) age=\(age)"
-        )
-        #endif
         // macOS answers cmux's own activation request with the same event a
         // Dock click or Command-Tab produces, so a request cmux made itself
         // just before rules the activation out.
         let requestedByCmux = AppDelegate.shared?.mainWindowVisibilityController
             .requestedOwnActivation(within: .seconds(TerminalUserActivation.freshness)) ?? false
-        guard judged.isUserCaused, !requestedByCmux else { return }
-        terminalSurface.onDirectUserInput?()
+        #if DEBUG
+        let subtype = event?.type == .appKitDefined ? "\(event?.subtype.rawValue ?? -1)" : "-"
+        let age = event.map { String(format: "%.3f", now - $0.timestamp) } ?? "-"
+        cmuxDebugLog(
+            "terminal.activation userCaused=\(judged.isUserCaused) requestedByCmux=\(requestedByCmux) " +
+            "type=\(event.map { "\($0.type.rawValue)" } ?? "nil") subtype=\(subtype) age=\(age)"
+        )
+        #endif
+        return judged.isUserCaused && !requestedByCmux
     }
 }
