@@ -140,12 +140,15 @@ extension Workspace {
     /// against this Mac's filesystem. Only a terminal known to run on this Mac
     /// resolves locally: SSH, cloud and unplaced surfaces don't. Projected tmux
     /// panes are remote even though their mirror-owned surface IDs are not
-    /// stored in the ordinary remote-terminal set.
+    /// stored in the ordinary remote-terminal set, except the panes of a local
+    /// mirror, whose tmux server runs on this Mac.
     func canResolveTerminalPathsAgainstLocalFilesystem(surfaceID: UUID) -> Bool {
         guard !isRemoteTerminalSurface(surfaceID) else { return false }
         switch remoteTmuxControlSurfaceTarget(surfaceID: surfaceID) {
-        case .unresolvedMirror, .pane:
+        case .unresolvedMirror:
             return false
+        case .pane(let location):
+            return remoteTmuxHost(of: location)?.transport == .local
         case .notRemote:
             break
         }
@@ -157,6 +160,15 @@ extension Workspace {
             return !dock.terminalLinkIsRemoteTerminal(surfaceID)
         }
         return false
+    }
+
+    /// The tmux host behind a mirrored pane: the session mirror's host, or the window
+    /// mirror's own control stream (unwrapping a per-session channel over a shared stream).
+    private func remoteTmuxHost(of location: RemoteTmuxControlPaneLocation) -> RemoteTmuxHost? {
+        if let host = remoteTmuxSessionMirror?.host { return host }
+        var source = location.windowMirror?.connection
+        while let channel = source as? RemoteTmuxSessionChannel { source = channel.underlying }
+        return (source as? RemoteTmuxControlConnection)?.host
     }
 
     /// Agent discovery and launch policy must classify the live projected
