@@ -71,4 +71,46 @@ import Testing
         #expect(!remote.workspace.canResolveTerminalPathsAgainstLocalFilesystem(surfaceID: remote.paneSurfaceID))
         #expect(remote.workspace.terminalLinkIsRemoteTerminal(remote.paneSurfaceID))
     }
+
+    // Review F12: a relative path printed in a pane resolves against that pane's own directory,
+    // as tmux reports it, not the active pane's or the workspace's.
+    @Test func eachSplitPaneResolvesRelativePathsAgainstItsOwnDirectory() throws {
+        let workspace = Workspace()
+        let outerPanelID = try #require(workspace.focusedPanelId)
+        let connection = RemoteTmuxControlConnection(
+            host: RemoteTmuxHost(destination: "local", transport: .local, serverSocketPath: "/tmp/tmux-501/default"),
+            sessionName: "work"
+        )
+        let paneIDs = [11: PaneID(), 22: PaneID()]
+        let geometry = RemoteTmuxMirrorGeometry(
+            cellWidthPx: 16, cellHeightPx: 34, surfacePadWidthPx: 8, surfacePadHeightPx: 8, scale: 2
+        )
+        let mirror = RemoteTmuxWindowMirror(
+            windowId: 3,
+            panelId: outerPanelID,
+            connection: connection,
+            layout: RemoteTmuxLayoutNode(width: 80, height: 24, x: 0, y: 0, content: .horizontal([
+                RemoteTmuxLayoutNode(width: 40, height: 24, x: 0, y: 0, content: .pane(11)),
+                RemoteTmuxLayoutNode(width: 39, height: 24, x: 41, y: 0, content: .pane(22)),
+            ])),
+            geometrySource: { geometry },
+            controlPaneID: { paneIDs[$0] },
+            makePanel: { [workspace] _ in workspace.makeRemoteTmuxPanePanel(onInput: { _ in }) }
+        )
+        workspace.isRemoteTmuxMirror = true
+        workspace.setRemoteTmuxWindowMirror(mirror, forPanelId: outerPanelID)
+        defer {
+            workspace.setRemoteTmuxWindowMirror(nil, forPanelId: outerPanelID)
+            workspace.isRemoteTmuxMirror = false
+            mirror.teardown()
+            workspace.teardownAllPanels()
+        }
+        let left = try #require(mirror.controlPane(tmuxPaneID: 11)?.panel.id)
+        let right = try #require(mirror.controlPane(tmuxPaneID: 22)?.panel.id)
+        mirror.updatePaneCwd(paneId: 11, path: "/tmp/cmux-link-test/a")
+        mirror.updatePaneCwd(paneId: 22, path: "/tmp/cmux-link-test/b")
+
+        #expect(workspace.terminalLinkWorkingDirectory(for: left) == "/tmp/cmux-link-test/a")
+        #expect(workspace.terminalLinkWorkingDirectory(for: right) == "/tmp/cmux-link-test/b")
+    }
 }
