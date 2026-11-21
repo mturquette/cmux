@@ -59,7 +59,7 @@ public struct RemoteTmuxNativeLayoutMetrics: Equatable, Sendable {
         cellPx: (width: Int, height: Int),
         scrollerGutterPt: CGFloat = 0
     ) -> (columns: Int, rows: Int) {
-        let widthPx = Int((outer.width * scale).rounded(.down))
+        let widthPx = Int(((outer.width - scrollerGutterPt) * scale).rounded(.down))
         let surfaceHeightPx = Int(
             ((outer.height - tabBarHeight) * scale).rounded(.down)
         )
