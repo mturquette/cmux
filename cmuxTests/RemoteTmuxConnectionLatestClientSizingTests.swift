@@ -194,8 +194,48 @@ import Testing
     private func holdWindowBelowClaim(_ wire: Wire, windowSize: String = "latest") {
         push(wire, roster(windowSize: windowSize, itermActivity: 100))
         wire.connection.lastWindowSizes[3] = (209, 57)
-        let pane = RemoteTmuxLayoutNode(width: 209, height: 46, x: 0, y: 0, content: .pane(1))
-        wire.connection.windowsByID[3] = RemoteTmuxWindow(id: 3, width: 209, height: 46, layout: pane)
+        setWindow(wire, 3, rows: 46)
+    }
+
+    private func setWindow(_ wire: Wire, _ windowId: Int, rows: Int) {
+        let pane = RemoteTmuxLayoutNode(width: 209, height: rows, x: 0, y: 0, content: .pane(windowId * 10))
+        wire.connection.windowsByID[windowId] = RemoteTmuxWindow(id: windowId, width: 209, height: rows, layout: pane)
+    }
+
+    // Review F7: once the window is back at the claim, the same shortfall later is taken back again.
+    @Test func theSameShortfallIsTakenBackAgainAfterTheWindowRecovered() throws {
+        let wire = connectedWire(label: "latest-size-shortfall-again")
+        defer { wire.connection.stop() }
+        _ = try sentCommands(wire)
+        let next = reattachKeepingState(wire)
+        holdWindowBelowClaim(next)
+
+        next.connection.noteUserInputForSizing(windowId: 3)
+        setWindow(next, 3, rows: 57)
+        setWindow(next, 3, rows: 46)
+        next.connection.noteUserInputForSizing(windowId: 3)
+
+        #expect(try sizingCommands(next) == ["select-window", "select-window"])
+    }
+
+    // Review F8: a targetless select-window can only grow tmux's current window, so a key in
+    // another short window sends nothing and leaves that window's shortfall for later.
+    @Test func aShortfallInAWindowThatIsNotTmuxsCurrentOneWaitsUntilItIs() throws {
+        let wire = connectedWire(label: "latest-size-shortfall-not-current")
+        defer { wire.connection.stop() }
+        _ = try sentCommands(wire)
+        let next = reattachKeepingState(wire)
+        push(next, roster(itermActivity: 100))
+        next.connection.lastWindowSizes[4] = (209, 57)
+        setWindow(next, 4, rows: 46)
+
+        next.connection.noteUserInputForSizing(windowId: 4)
+        #expect(try sizingCommands(next).isEmpty)
+
+        let later = reattachKeepingState(next)
+        push(later, "\(Self.me)|latest|@4|\(Self.me)/1/1794863536/120//0/1;\(Self.iterm)/0/100/264/47/0/1;")
+        later.connection.noteUserInputForSizing(windowId: 4)
+        #expect(try sizingCommands(later) == ["select-window"])
     }
 
     @Test func directInputTakesBackAWindowHeldBelowThisMirrorsClaim() throws {
