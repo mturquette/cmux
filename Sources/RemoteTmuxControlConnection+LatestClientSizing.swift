@@ -162,8 +162,13 @@ extension RemoteTmuxControlConnection {
     /// it stand aside, or ignored it as late. Without this, the user's typing here never makes
     /// the mirror latest again, and a split window keeps the other client's height, leaving
     /// part of the cmux pane blank. A targetless `select-window` makes this client latest, as
-    /// in ``noteUserInputForSizing(windowId:)``. Sent once per shortfall, so a window tmux
-    /// cannot grow for another reason costs one command, not one per key.
+    /// in ``noteUserInputForSizing(windowId:)``. Sent once per occurrence, so a window tmux
+    /// cannot grow for another reason costs one command, not one per key; the occurrence is
+    /// forgotten as soon as the window's size changes (``forgetChangedShortfall()``).
+    ///
+    /// A targetless `select-window` only makes this client latest for tmux's current window,
+    /// so a key in another window sends nothing and leaves its shortfall for the time that
+    /// window is current.
     private func takeBackShortfallIfAny(windowId: Int?) {
         guard let windowId,
               latestClientSizing.roster?.followsLatestClient == true,
@@ -171,11 +176,27 @@ extension RemoteTmuxControlConnection {
               let window = windowsByID[windowId],
               window.width < claim.0 || window.height < claim.1
         else { return }
+        if let current = latestClientSizing.roster?.currentWindowId, current != windowId {
+            note("latest-size shortfall @\(windowId) left for later; tmux's current window is @\(current)")
+            return
+        }
         let shortfall = RemoteTmuxWindowShortfall(windowId: windowId, columns: window.width, rows: window.height)
         guard latestClientSizing.lastShortfallTakenBack != shortfall else { return }
         latestClientSizing.lastShortfallTakenBack = shortfall
         note("latest-size take-back-shortfall @\(windowId) tmux=\(window.width)x\(window.height) claim=\(claim.0)x\(claim.1)")
         send("select-window")
+    }
+
+    /// Forgets the shortfall last taken back once its window no longer has that size, so the
+    /// next time tmux holds the window short (often at the same size, since the other
+    /// terminal keeps its size) a key takes it back again. Called on every window update.
+    func forgetChangedShortfall() {
+        guard let shortfall = latestClientSizing.lastShortfallTakenBack else { return }
+        if let window = windowsByID[shortfall.windowId],
+           window.width == shortfall.columns, window.height == shortfall.rows {
+            return
+        }
+        latestClientSizing.lastShortfallTakenBack = nil
     }
 
     /// The mode a reconnect spawns with: the attach mode below once the stream
