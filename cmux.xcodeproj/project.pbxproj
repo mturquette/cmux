@@ -3143,6 +3143,7 @@
 		8BD32E0352AC19744B160FA5 /* RemoteTmuxLinkedViewPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1214991DB32A53F3003CA28D /* RemoteTmuxLinkedViewPlan.swift */; };
 		FFECF0CF0A10E3E3E9B23D1D /* RemoteTmuxLinkedWorkspaceModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A46B85D7658C61882ADA75E /* RemoteTmuxLinkedWorkspaceModel.swift */; };
 		3F9BDFF45EF40505293506A0 /* RemoteTmuxLinkedWorkspaceModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17096B295FD35EC68C305757 /* RemoteTmuxLinkedWorkspaceModelTests.swift */; };
+		7FC54174B71BDB00DD96F1C4 /* RemoteTmuxLocalMirrorLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9795D91B0519DB0598C32786 /* RemoteTmuxLocalMirrorLinkTests.swift */; };
 		6C21557DD009921934F97D9E /* RemoteTmuxLocalMixedReleaseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A143F45A8FCE64BB6076B5A0 /* RemoteTmuxLocalMixedReleaseTests.swift */; };
 		E29F4163CA6BD6A5ECF04DDA /* RemoteTmuxLocalPseudoTerminal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25E4C08DE60A39D71870BDF8 /* RemoteTmuxLocalPseudoTerminal.swift */; };
 		84057BBB69BA8147610C0F12 /* RemoteTmuxLocalPseudoTerminalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81B9246931FC124449EB63A3 /* RemoteTmuxLocalPseudoTerminalTests.swift */; };
@@ -7850,6 +7851,7 @@
 		1214991DB32A53F3003CA28D /* RemoteTmuxLinkedViewPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteTmuxLinkedViewPlan.swift; sourceTree = "<group>"; };
 		7A46B85D7658C61882ADA75E /* RemoteTmuxLinkedWorkspaceModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteTmuxLinkedWorkspaceModel.swift; sourceTree = "<group>"; };
 		17096B295FD35EC68C305757 /* RemoteTmuxLinkedWorkspaceModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RemoteTmuxLinkedWorkspaceModelTests.swift"; sourceTree = "<group>"; };
+		9795D91B0519DB0598C32786 /* RemoteTmuxLocalMirrorLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RemoteTmuxLocalMirrorLinkTests.swift"; sourceTree = "<group>"; };
 		A143F45A8FCE64BB6076B5A0 /* RemoteTmuxLocalMixedReleaseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RemoteTmuxLocalMixedReleaseTests.swift"; sourceTree = "<group>"; };
 		25E4C08DE60A39D71870BDF8 /* RemoteTmuxLocalPseudoTerminal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteTmuxLocalPseudoTerminal.swift; sourceTree = "<group>"; };
 		81B9246931FC124449EB63A3 /* RemoteTmuxLocalPseudoTerminalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RemoteTmuxLocalPseudoTerminalTests.swift"; sourceTree = "<group>"; };
@@ -14408,6 +14410,7 @@
 				9C9C60A767D9DDE6CA4A3287 /* RemoteTmuxLocalTransportProfileTests.swift */,
 				A143F45A8FCE64BB6076B5A0 /* RemoteTmuxLocalMixedReleaseTests.swift */,
 				0FA5F721FC505C1B9E977AEC /* RemoteTmuxLocalServerBinaryTests.swift */,
+				9795D91B0519DB0598C32786 /* RemoteTmuxLocalMirrorLinkTests.swift */,
 			);
 			path = cmuxTests;
 			sourceTree = "<group>";
@@ -19389,6 +19392,7 @@
 				F1936170A623DA26173CDB01 /* RemoteTmuxInputCommandCapture.swift in Sources */,
 				F1936170A623DA26173CDB03 /* RemoteTmuxInputCommandCaptureTests.swift in Sources */,
 				3F9BDFF45EF40505293506A0 /* RemoteTmuxLinkedWorkspaceModelTests.swift in Sources */,
+				7FC54174B71BDB00DD96F1C4 /* RemoteTmuxLocalMirrorLinkTests.swift in Sources */,
 				6C21557DD009921934F97D9E /* RemoteTmuxLocalMixedReleaseTests.swift in Sources */,
 				84057BBB69BA8147610C0F12 /* RemoteTmuxLocalPseudoTerminalTests.swift in Sources */,
 				E4F3A5BA317A7A16D70E81ED /* RemoteTmuxLocalServerBinaryTests.swift in Sources */,
