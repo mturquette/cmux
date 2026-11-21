@@ -24,6 +24,10 @@ public struct RemoteTmuxMirrorGeometry: Equatable, Sendable {
     public let surfacePadHeightPx: Int
     /// The hosting window's backing scale (1.0 or 2.0 on macOS).
     public let scale: CGFloat
+    /// Width in points of the vertical scroller's gutter beside each pane's
+    /// terminal: the width a legacy ("Show scroll bars: Always") scroller takes
+    /// from the visible area, and zero for an overlay scroller, which takes none.
+    public let scrollerGutterWidthPt: CGFloat
 
     /// Creates a measured geometry snapshot.
     public init(
@@ -31,13 +35,24 @@ public struct RemoteTmuxMirrorGeometry: Equatable, Sendable {
         cellHeightPx: Int,
         surfacePadWidthPx: Int,
         surfacePadHeightPx: Int,
-        scale: CGFloat
+        scale: CGFloat,
+        scrollerGutterWidthPt: CGFloat = 0
     ) {
         self.cellWidthPx = cellWidthPx
         self.cellHeightPx = cellHeightPx
         self.surfacePadWidthPx = surfacePadWidthPx
         self.surfacePadHeightPx = surfacePadHeightPx
         self.scale = scale
+        self.scrollerGutterWidthPt = scrollerGutterWidthPt
+    }
+
+    /// Native point chrome each pane carries outside its rendered grid, for
+    /// ``RemoteTmuxNativeLayoutMetrics``.
+    public var surfacePaddingPt: CGSize {
+        CGSize(
+            width: CGFloat(surfacePadWidthPx) / scale,
+            height: CGFloat(surfacePadHeightPx) / scale
+        )
     }
 
     /// Floors below which a client size is never pushed: tmux clamps
