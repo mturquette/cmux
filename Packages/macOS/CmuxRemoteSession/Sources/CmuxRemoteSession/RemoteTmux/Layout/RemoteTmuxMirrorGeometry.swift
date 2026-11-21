@@ -47,10 +47,11 @@ public struct RemoteTmuxMirrorGeometry: Equatable, Sendable {
     }
 
     /// Native point chrome each pane carries outside its rendered grid, for
-    /// ``RemoteTmuxNativeLayoutMetrics``.
+    /// ``RemoteTmuxNativeLayoutMetrics``: ghostty's padding plus the scroller
+    /// gutter, so every claimed column is drawn where it can be seen.
     public var surfacePaddingPt: CGSize {
         CGSize(
-            width: CGFloat(surfacePadWidthPx) / scale,
+            width: CGFloat(surfacePadWidthPx) / scale + scrollerGutterWidthPt,
             height: CGFloat(surfacePadHeightPx) / scale
         )
     }

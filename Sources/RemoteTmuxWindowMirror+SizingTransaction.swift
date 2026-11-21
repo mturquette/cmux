@@ -178,7 +178,9 @@ extension RemoteTmuxWindowMirror {
             cellHeightPx: sample.cellHeightPx,
             surfacePadWidthPx: minNonGridWidthPxByScale[scale] ?? max(0, nonGridW),
             surfacePadHeightPx: minNonGridHeightPxByScale[scale] ?? max(0, nonGridH),
-            scale: scale
+            scale: scale,
+            // Every pane of a window shares one scroller style, so the widest gutter is the one.
+            scrollerGutterWidthPt: panelsByPaneId.values.map(\.hostedView.scrollerGutterWidth).max() ?? 0
         )
         if geometrySnapshot != geometry {
             geometrySnapshot = geometry
