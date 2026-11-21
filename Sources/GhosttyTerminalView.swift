@@ -10778,6 +10778,9 @@ final class GhosttySurfaceScrollView: NSView {
     private var sharedBackdropCutoutView: NSView?
     private let backgroundView: TerminalPaneBackgroundView
     private let scrollView: GhosttyScrollView
+    /// The width a legacy vertical scroller takes from the visible terminal area; zero for an
+    /// overlay scroller. A remote tmux mirror leaves it out of the columns it asks tmux for.
+    var scrollerGutterWidth: CGFloat { max(0, scrollView.frame.width - scrollView.contentView.bounds.width) }
     private let documentView: NSView
     let surfaceView: GhosttyNSView
     private let mobileViewportBorderOverlayView = TerminalViewportBorderOverlayView(frame: .zero)

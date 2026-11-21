@@ -25,10 +25,8 @@ extension RemoteTmuxWindowMirror {
                 width: CGFloat(geometry.cellWidthPx) / geometry.scale,
                 height: CGFloat(geometry.cellHeightPx) / geometry.scale
             ),
-            surfacePadding: CGSize(
-                width: CGFloat(geometry.surfacePadWidthPx) / geometry.scale,
-                height: CGFloat(geometry.surfacePadHeightPx) / geometry.scale
-            ),
+            // Includes a legacy scroller's gutter, so no claimed column is drawn under it.
+            surfacePadding: geometry.surfacePaddingPt,
             // Charge the tab bar only when it is drawn. A mirror pane holds exactly one tab, so
             // that is what the visibility rule is asked about; a hidden bar that still cost its
             // height would leave the claim short by one bar per pane and strand a strip of the
