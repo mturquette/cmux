@@ -186,6 +186,56 @@ import Testing
         #expect(try sizingCommands(next).isEmpty)
     }
 
+    /// A window tmux holds below this mirror's claim, as when another client
+    /// became tmux's latest one without this mirror standing aside (a report
+    /// ignored as late, or one that never arrived). Reported 2026-11-21: a split
+    /// window claimed at 209x57 stayed at 209x46, and its bottom pane never
+    /// reached the bottom of the cmux pane, however much the user typed.
+    private func holdWindowBelowClaim(_ wire: Wire, windowSize: String = "latest") {
+        push(wire, roster(windowSize: windowSize, itermActivity: 100))
+        wire.connection.lastWindowSizes[3] = (209, 57)
+        let pane = RemoteTmuxLayoutNode(width: 209, height: 46, x: 0, y: 0, content: .pane(1))
+        wire.connection.windowsByID[3] = RemoteTmuxWindow(id: 3, width: 209, height: 46, layout: pane)
+    }
+
+    @Test func directInputTakesBackAWindowHeldBelowThisMirrorsClaim() throws {
+        let wire = connectedWire(label: "latest-size-shortfall")
+        defer { wire.connection.stop() }
+        _ = try sentCommands(wire)
+        let next = reattachKeepingState(wire)
+        holdWindowBelowClaim(next)
+
+        next.connection.noteUserInputForSizing(windowId: 3)
+
+        #expect(try sizingCommands(next) == ["select-window"])
+    }
+
+    @Test func aShortfallIsTakenBackOnceNotOnEveryKey() throws {
+        let wire = connectedWire(label: "latest-size-shortfall-once")
+        defer { wire.connection.stop() }
+        _ = try sentCommands(wire)
+        let next = reattachKeepingState(wire)
+        holdWindowBelowClaim(next)
+
+        next.connection.noteUserInputForSizing(windowId: 3)
+        next.connection.noteUserInputForSizing(windowId: 3)
+        next.connection.noteUserInputForSizing(windowId: 3)
+
+        #expect(try sizingCommands(next) == ["select-window"])
+    }
+
+    @Test func aShortfallUnderAnotherWindowSizeSettingIsLeftAlone() throws {
+        let wire = connectedWire(label: "latest-size-shortfall-smallest")
+        defer { wire.connection.stop() }
+        _ = try sentCommands(wire)
+        let next = reattachKeepingState(wire)
+        holdWindowBelowClaim(next, windowSize: "smallest")
+
+        next.connection.noteUserInputForSizing(windowId: 3)
+
+        #expect(try sizingCommands(next).isEmpty)
+    }
+
     @Test func leavingWindowSizeLatestRejoinsWithoutClaiming() throws {
         let wire = connectedWire(label: "latest-size-rejoin")
         defer { wire.connection.stop() }
