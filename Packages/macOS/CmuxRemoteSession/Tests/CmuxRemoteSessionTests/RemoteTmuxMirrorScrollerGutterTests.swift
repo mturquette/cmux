@@ -47,6 +47,21 @@ import Testing
         #expect(CGFloat(claimed) * 8 + 7 <= visibleWidth)
     }
 
+    // Review F10: the one points-to-cells model, which the debug parity check uses, agrees with
+    // the claim beside a gutter.
+    @Test func theRenderedCellsModelLeavesTheGutterOut() {
+        let g = geometry(gutter: 15)
+        let rendered = RemoteTmuxNativeLayoutMetrics.renderedCells(
+            outer: CGSize(width: 1680, height: 1024),
+            tabBarHeight: 0,
+            scale: g.scale,
+            surfacePadPx: (width: g.surfacePadWidthPx, height: g.surfacePadHeightPx),
+            cellPx: (width: g.cellWidthPx, height: g.cellHeightPx),
+            scrollerGutterPt: g.scrollerGutterWidthPt
+        )
+        #expect(rendered.columns == 207)
+    }
+
     // An overlay scroller takes no width, so the claim is what it was.
     @Test func anOverlayScrollerChangesNothing() {
         #expect(geometry(gutter: 0).surfacePaddingPt == CGSize(width: 7, height: 0))
