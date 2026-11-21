@@ -3939,6 +3939,8 @@
 		A10199010000000000000001 /* TerminalAdaptiveDefaultThemeSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10199010000000000000002 /* TerminalAdaptiveDefaultThemeSettings.swift */; };
 		C10190010000000000000002 /* TerminalAgentPanelInitialTitleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10190010000000000000001 /* TerminalAgentPanelInitialTitleTests.swift */; };
 		46F6AC15863EC84DCD3770A2 /* TerminalAndGhosttyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02FC74F2C27127CC565B3E8C /* TerminalAndGhosttyTests.swift */; };
+		6EADB69581275339327650CD /* TerminalAppActivationObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0690644B7692B0A0F9EBCFD7 /* TerminalAppActivationObserver.swift */; };
+		B90DD2008EAD07D8D27E279B /* TerminalAppActivationObserverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94FE1C9C756AD26E88C3466B /* TerminalAppActivationObserverTests.swift */; };
 		6F0E03F10882D25FA5CB0A34 /* TerminalBrowserHostNormalizer+TopLevelDomain.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1067219E6C38ECF316D8AA4 /* TerminalBrowserHostNormalizer+TopLevelDomain.swift */; };
 		8362A0030000000000000003 /* TerminalCallerTTYBinding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8362A0040000000000000004 /* TerminalCallerTTYBinding.swift */; };
 		8362A0010000000000000001 /* TerminalCallerTTYResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8362A0020000000000000002 /* TerminalCallerTTYResolver.swift */; };
@@ -8620,6 +8622,8 @@
 		A10199010000000000000002 /* TerminalAdaptiveDefaultThemeSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalAdaptiveDefaultThemeSettings.swift; sourceTree = "<group>"; };
 		C10190010000000000000001 /* TerminalAgentPanelInitialTitleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalAgentPanelInitialTitleTests.swift; sourceTree = "<group>"; };
 		02FC74F2C27127CC565B3E8C /* TerminalAndGhosttyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalAndGhosttyTests.swift; sourceTree = "<group>"; };
+		0690644B7692B0A0F9EBCFD7 /* TerminalAppActivationObserver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalAppActivationObserver.swift; sourceTree = "<group>"; };
+		94FE1C9C756AD26E88C3466B /* TerminalAppActivationObserverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalAppActivationObserverTests.swift"; sourceTree = "<group>"; };
 		C1067219E6C38ECF316D8AA4 /* TerminalBrowserHostNormalizer+TopLevelDomain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalBrowserHostNormalizer+TopLevelDomain.swift"; sourceTree = "<group>"; };
 		8362A0040000000000000004 /* TerminalCallerTTYBinding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalCallerTTYBinding.swift; sourceTree = "<group>"; };
 		8362A0020000000000000002 /* TerminalCallerTTYResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalCallerTTYResolver.swift; sourceTree = "<group>"; };
@@ -12708,6 +12712,7 @@
 				067ED4C318664E11B67921F3 /* AppDelegate+NotificationsPopoverDigits.swift */,
 				6FBDBC05EA0CA25F9F5EB901 /* RemoteTmuxControlConnection+LatestClientSizing.swift */,
 				FE4C4536625408FBDA96353E /* GhosttyNSView+DirectUserInput.swift */,
+				0690644B7692B0A0F9EBCFD7 /* TerminalAppActivationObserver.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -14362,6 +14367,7 @@
 				2E93DBA33C7287FE3D7FA1BB /* NotificationPopoverRowLayoutTests.swift */,
 				C0C7EE23B232921D28CA56FD /* NotificationsPopoverDrawnRowsTests.swift */,
 				78D5D04E01664D03275EBFC5 /* RemoteTmuxConnectionLatestClientSizingTests.swift */,
+				94FE1C9C756AD26E88C3466B /* TerminalAppActivationObserverTests.swift */,
 			);
 			path = cmuxTests;
 			sourceTree = "<group>";
@@ -17360,6 +17366,7 @@
 				0044CBDD567D9CD29E6A6F12 /* TelemetrySettings.swift in Sources */,
 				D63161E354D8403AB167AD2A /* TerminalAccessibilityText.swift in Sources */,
 				A10199010000000000000001 /* TerminalAdaptiveDefaultThemeSettings.swift in Sources */,
+				6EADB69581275339327650CD /* TerminalAppActivationObserver.swift in Sources */,
 				6F0E03F10882D25FA5CB0A34 /* TerminalBrowserHostNormalizer+TopLevelDomain.swift in Sources */,
 				8362A0030000000000000003 /* TerminalCallerTTYBinding.swift in Sources */,
 				8362A0010000000000000001 /* TerminalCallerTTYResolver.swift in Sources */,
@@ -19571,6 +19578,7 @@
 				8EAD3C75402AB9B2CCF95DD6 /* TerminalAccessibilityTextTests.swift in Sources */,
 				C10190010000000000000002 /* TerminalAgentPanelInitialTitleTests.swift in Sources */,
 				46F6AC15863EC84DCD3770A2 /* TerminalAndGhosttyTests.swift in Sources */,
+				B90DD2008EAD07D8D27E279B /* TerminalAppActivationObserverTests.swift in Sources */,
 				8362B0010000000000000001 /* TerminalCallerTTYResolverTests.swift in Sources */,
 				E4D1768B7041CDE4F9A084A4 /* TerminalClearScreenKeepScrollbackTests.swift in Sources */,
 				B8835A000000000000000003 /* TerminalClipboardInputSequencerTests+Replay.swift in Sources */,
