@@ -77,6 +77,34 @@ import Testing
         #expect(remote.workspace.terminalLinkIsRemoteTerminal(remote.paneSurfaceID))
     }
 
+    // Review F15: the path the app takes, where the workspace has a session mirror and the host
+    // comes from it. A local session mirror's panes resolve on this Mac; an ssh one's do not.
+    @Test(arguments: [RemoteTmuxTransportKind.local, .ssh])
+    func aSessionMirrorsPanesFollowItsHostsTransport(transport: RemoteTmuxTransportKind) throws {
+        let manager = TabManager()
+        let workspace = manager.addWorkspace(select: false, autoWelcomeIfNeeded: false)
+        workspace.isRemoteTmuxMirror = true
+        let host = transport == .local
+            ? RemoteTmuxHost(destination: "local", transport: .local, serverSocketPath: "/tmp/tmux-501/default")
+            : RemoteTmuxHost(destination: "user@petit", transport: .ssh)
+        let connection = RemoteTmuxControlConnection(host: host, sessionName: "work")
+        let layout = RemoteTmuxLayoutNode(width: 80, height: 24, x: 0, y: 0, content: .pane(7))
+        connection.windowsByID[1] = RemoteTmuxWindow(id: 1, width: 80, height: 24, layout: layout)
+        connection.windowOrder = [1]
+        connection.publishedWindowIdByPane = [7: 1]
+        let mirror = RemoteTmuxSessionMirror(
+            host: host, sessionName: "work", connection: connection, tabManager: manager, workspace: workspace
+        )
+        defer {
+            mirror.detachObserver()
+            workspace.teardownAllPanels()
+        }
+        #expect(workspace.remoteTmuxSessionMirror === mirror)
+        let paneSurfaceID = try #require(mirror.controlSurfaceIdByPane[7])
+
+        #expect(workspace.canResolveTerminalPathsAgainstLocalFilesystem(surfaceID: paneSurfaceID) == (transport == .local))
+    }
+
     // Review F12: a relative path printed in a pane resolves against that pane's own directory,
     // as tmux reports it, not the active pane's or the workspace's.
     @Test func eachSplitPaneResolvesRelativePathsAgainstItsOwnDirectory() throws {
