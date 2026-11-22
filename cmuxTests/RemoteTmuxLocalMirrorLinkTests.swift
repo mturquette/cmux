@@ -21,6 +21,8 @@ import Testing
         let outerPanelID: UUID
         let mirror: RemoteTmuxWindowMirror
         let paneSurfaceID: UUID
+        /// Held here because a window mirror keeps its connection weakly.
+        let connection: RemoteTmuxControlConnection
 
         func tearDown() {
             workspace.setRemoteTmuxWindowMirror(nil, forPanelId: outerPanelID)
@@ -50,7 +52,10 @@ import Testing
         workspace.isRemoteTmuxMirror = true
         workspace.setRemoteTmuxWindowMirror(mirror, forPanelId: outerPanelID)
         let paneSurfaceID = try #require(mirror.controlPanes().first?.panel.id)
-        return Mirrored(workspace: workspace, outerPanelID: outerPanelID, mirror: mirror, paneSurfaceID: paneSurfaceID)
+        return Mirrored(
+            workspace: workspace, outerPanelID: outerPanelID, mirror: mirror,
+            paneSurfaceID: paneSurfaceID, connection: connection
+        )
     }
 
     @Test func aLocalMirrorPanesLinksOpenOnThisMac() throws {
